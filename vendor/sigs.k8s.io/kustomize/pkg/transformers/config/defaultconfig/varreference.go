@@ -45,7 +45,7 @@ varReference:
 
 - path: spec/template/spec/initContainers/args
   kind: StatefulSet
-
+ 
 - path: spec/template/spec/containers/args
   kind: StatefulSet
 

@@ -416,3 +416,4 @@ message ScaleStatus {
   // +optional
   optional string selector = 2;
 }
+

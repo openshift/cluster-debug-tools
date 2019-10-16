@@ -145,3 +145,4 @@ message EndpointSliceList {
   // +listType=set
   repeated EndpointSlice items = 2;
 }
+

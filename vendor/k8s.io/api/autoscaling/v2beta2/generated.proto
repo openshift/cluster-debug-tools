@@ -369,3 +369,4 @@ message ResourceMetricStatus {
   // current contains the current value for the given metric
   optional MetricValueStatus current = 2;
 }
+

@@ -8,3 +8,4 @@ include $(addprefix $(self_dir), \
 	default.mk \
 	targets/openshift/operator/*.mk \
 )
+
