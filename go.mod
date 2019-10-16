@@ -1,4 +1,4 @@
-module github.com/openshift/must-gather
+module github.com/openshift/cluster-debug-tools
 
 go 1.12
 

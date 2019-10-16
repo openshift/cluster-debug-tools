@@ -3,15 +3,15 @@ package main
 import (
 	"os"
 
-	analyze_e2e "github.com/openshift/must-gather/pkg/cmd/analyze-e2e"
-	"github.com/openshift/must-gather/pkg/cmd/audit"
-	"github.com/openshift/must-gather/pkg/cmd/certinspection"
-	"github.com/openshift/must-gather/pkg/cmd/events"
+	analyze_e2e "github.com/openshift/cluster-debug-tools/pkg/cmd/analyze-e2e"
+	"github.com/openshift/cluster-debug-tools/pkg/cmd/audit"
+	"github.com/openshift/cluster-debug-tools/pkg/cmd/certinspection"
+	"github.com/openshift/cluster-debug-tools/pkg/cmd/events"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 
-	mustgather "github.com/openshift/must-gather/pkg/cmd"
+	mustgather "github.com/openshift/cluster-debug-tools/pkg/cmd"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 )
 

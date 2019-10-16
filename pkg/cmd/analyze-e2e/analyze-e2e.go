@@ -8,7 +8,7 @@ import (
 
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 
-	"github.com/openshift/must-gather/pkg/cmd/analyze-e2e/analyzers"
+	"github.com/openshift/cluster-debug-tools/pkg/cmd/analyze-e2e/analyzers"
 )
 
 var artifactsToAnalyzeList = map[string]Analyzer{

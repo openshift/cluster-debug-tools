@@ -21,6 +21,3 @@
 *.out
 
 /openshift-dev-helpers
-/openshift-must-gather
-
-must-gather

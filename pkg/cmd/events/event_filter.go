@@ -1,7 +1,7 @@
 package events
 
 import (
-	"github.com/openshift/must-gather/pkg/util"
+	"github.com/openshift/cluster-debug-tools/pkg/util"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/openshift/must-gather/pkg/util"
+	"github.com/openshift/cluster-debug-tools/pkg/util"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"

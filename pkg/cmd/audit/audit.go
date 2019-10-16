@@ -13,7 +13,7 @@ import (
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 
-	"github.com/openshift/must-gather/pkg/util"
+	"github.com/openshift/cluster-debug-tools/pkg/util"
 )
 
 var (
