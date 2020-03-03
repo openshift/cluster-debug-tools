@@ -39,3 +39,4 @@ $(call build-image,ocp-openshift-apiserver-operator,registry.svc.ci.openshift.or
 # It will generate targets {update,verify}-bindata-$(1) logically grouping them in unsuffixed versions of these targets
 # and also hooked into {update,verify}-generated for broader integration.
 $(call add-bindata,v3.11.0,./bindata/v3.11.0/...,bindata,v311_00_assets,pkg/operator/v311_00_assets/bindata.go)
+

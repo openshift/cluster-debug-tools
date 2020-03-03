@@ -6,7 +6,7 @@ These are the building blocks for this and many of our other repositories to sha
 
 As some advanced targets are generated, every Makefile contains `make help` target listing all the available ones. All of the "example" makefiles have a corresponding `.help` file listing all the targets available there.
 
-Also for advanced use and if none of the predefined flows doesn't fit your needs, you can compose the flow from modules in similar way to how the predefined flows do,
+Also for advanced use and if none of the predefined flows doesn't fit your needs, you can compose the flow from modules in similar way to how the predefined flows do,  
 
 ### Golang
 Standard makefile for building pure Golang projects.
@@ -15,7 +15,7 @@ Standard makefile for building pure Golang projects.
  - [make/golang.example.mk.help](make/golang.example.mk.help)
 
 ### Default
-Standard makefile for OpenShift Golang projects.
+Standard makefile for OpenShift Golang projects. 
 
 Extends [#Golang]().
 
@@ -24,7 +24,7 @@ Extends [#Golang]().
  - [make/default.example.mk.help](make/default.example.mk.help)
 
 ### Operator
-Standard makefile for OpenShift Golang projects.
+Standard makefile for OpenShift Golang projects. 
 
 Extends [#Default]().
 
