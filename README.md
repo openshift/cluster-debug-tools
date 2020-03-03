@@ -1,20 +1,30 @@
 cluster-debug-tools
 ===================
 
-**WARNING**: The following tool is provided with no guarantees and might (and will) be changed at any time. Please do not rely on anything below in your scripts or automatization.
+> :warning:**WARNING**:warning: The following tool is provided with no guarantees and might (and will) be changed at any time. Please do not rely on anything below in your scripts or automatization.
 
-`openshift-dev-helpers` binary combines various tools useful for the OpenShift developers teams.
+`kubectl-dev_tools` binary combines various tools useful for the OpenShift developers teams. This binary is used as [kubectl plugin](https://kubernetes.io/docs/tasks/extend-kubectl/kubectl-plugins/).
 
-To list all events recorded during a test run and stored in `events.json` file, you can run this command:
-```bash
-./bin/openshift-dev-helpers events https://storage.googleapis.com/origin-ci-test/pr-logs/.../artifacts/e2e-aws/events.json --component=openshift-apiserver-operator
-```
+### Available commands
 
-### Building
+* `analyze-e2e`     inspects the artifacts gathered during e2e-aws run and analyze them.
+* `audit`           inspects the audit logs captured during CI test run.
+* `event`           inspects the event logs captured during CI test run.
+* `inspect-certs`   inspects the certs, keys, and ca-bundles in a set of resources.
+* `revision-status` counts failed installer pods and current revision of static pods.
 
-Place in GOPATH under `src/github.com/openshift/cluster-debug-tools`.
+### Building and Installing
 
-Build with:
-```
+To make this plugin available in `oc` or `kubectl`, just run: `go get github.com/openshift/cluster-debug-tools/cmd/kubectl-dev_tool`
+
+Alternatively, you can build and install it manually:
+
+```go
 $ make
+$ cp kubectl-dev_tool ${HOME}/bin/
 ```
+
+### License
+
+cluster-debug-tools is licensed under the [Apache License, Version 2.0](http://www.apache.org/licenses/).
+
