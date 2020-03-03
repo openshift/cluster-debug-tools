@@ -1,7 +1,14 @@
 package events
 
 import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/openshift/cluster-debug-tools/pkg/util"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -86,6 +93,50 @@ func (f *FilterByReasons) FilterEvents(events ...*corev1.Event) []*corev1.Event 
 		if util.AcceptString(f.Reasons, event.Reason) {
 			ret = append(ret, event)
 		}
+	}
+
+	return ret
+}
+
+type FilterByAround struct {
+	Around         string
+	AroundDuration time.Duration
+}
+
+func (f *FilterByAround) FilterEvents(events ...*corev1.Event) []*corev1.Event {
+	t := events[len(events)-1].LastTimestamp.Time
+	aroundParts := strings.Split(f.Around, ":")
+	if len(aroundParts) < 2 || len(aroundParts) > 3 {
+		fmt.Fprintf(os.Stderr, "invalid around time format, must be HH:MM or HH:MM:SS, got %q", f.Around)
+		return nil
+	}
+	aroundTimeHours, err := strconv.Atoi(aroundParts[0])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error parsing around time: %b", err)
+		return nil
+	}
+	aroundTimeMinutes, err := strconv.Atoi(aroundParts[1])
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error parsing around time: %b", err)
+		return nil
+	}
+	aroundTimeSeconds := 0
+	if len(aroundParts) > 2 {
+		aroundTimeSeconds, err = strconv.Atoi(aroundParts[2])
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error parsing around time: %b", err)
+			return nil
+		}
+	}
+
+	aroundTime := time.Date(t.Year(), t.Month(), t.Day(), aroundTimeHours, aroundTimeMinutes, aroundTimeSeconds, t.Nanosecond(), t.Location())
+	ret := []*corev1.Event{}
+	for i := range events {
+		event := events[i]
+		if event.LastTimestamp.Time.After(aroundTime.Add(f.AroundDuration)) || event.LastTimestamp.Time.Before(aroundTime.Add(-f.AroundDuration)) {
+			continue
+		}
+		ret = append(ret, event)
 	}
 
 	return ret

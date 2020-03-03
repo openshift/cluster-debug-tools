@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"k8s.io/apimachinery/pkg/runtime"
 
@@ -37,16 +38,18 @@ type EventOptions struct {
 	configFlags  *genericclioptions.ConfigFlags
 	builderFlags *genericclioptions.ResourceBuilderFlags
 
-	kinds       []string
-	namespaces  []string
-	names       []string
-	reasons     []string
-	components  []string
-	uids        []string
-	filename    string
-	warningOnly bool
-	output      string
-	sortBy      string
+	kinds          []string
+	namespaces     []string
+	names          []string
+	reasons        []string
+	components     []string
+	uids           []string
+	filename       string
+	warningOnly    bool
+	output         string
+	sortBy         string
+	around         string
+	aroundDuration time.Duration
 
 	genericclioptions.IOStreams
 }
@@ -101,6 +104,8 @@ func NewCmdEvent(parentName string, streams genericclioptions.IOStreams) *cobra.
 	cmd.Flags().StringSliceVar(&o.components, "component", o.components, "Filter result of search to only contain the specified component.)")
 	cmd.Flags().BoolVar(&o.warningOnly, "warning-only", false, "Filter result of search to only contain http failures.)")
 	cmd.Flags().StringVar(&o.sortBy, "by", o.sortBy, "Choose how to sort")
+	cmd.Flags().StringVar(&o.around, "around", o.around, "Display only events around specified time (format: hh:mm or hh:mm:ss)")
+	cmd.Flags().DurationVar(&o.aroundDuration, "around-duration", 10*time.Minute, "Change the time duration to display events around time")
 
 	o.configFlags.AddFlags(cmd.Flags())
 	o.builderFlags.AddFlags(cmd.Flags())
@@ -148,6 +153,9 @@ func (o *EventOptions) Run() error {
 	}
 
 	filters := EventFilters{}
+	if len(o.around) > 0 {
+		filters = append(filters, &FilterByAround{Around: o.around, AroundDuration: o.aroundDuration})
+	}
 	if len(o.uids) > 0 {
 		filters = append(filters, &FilterByUIDs{UIDs: sets.NewString(o.uids...)})
 	}
