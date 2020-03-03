@@ -11,7 +11,7 @@ func (s byTime) Swap(i, j int) {
 	s[i], s[j] = s[j], s[i]
 }
 func (s byTime) Less(i, j int) bool {
-	return s[i].FirstTimestamp.Before(&s[j].FirstTimestamp)
+	return s[i].LastTimestamp.Before(&s[j].LastTimestamp)
 }
 
 type byFrequency []*corev1.Event

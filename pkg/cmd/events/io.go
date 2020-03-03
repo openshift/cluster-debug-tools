@@ -33,7 +33,7 @@ func PrintEvents(writer io.Writer, events []*corev1.Event) error {
 		message = strings.Replace(message, `"""`, `"`, -1)
 		message = strings.Replace(message, "\t", "\t", -1)
 
-		if _, err := fmt.Fprintf(writer, "%s (%d) %q %s %s\n", event.FirstTimestamp.Format("15:04:05"), event.Count, event.InvolvedObject.Namespace, event.Reason, message); err != nil {
+		if _, err := fmt.Fprintf(writer, "%s (%d) %q %s %s\n", event.LastTimestamp.Format("15:04:05"), event.Count, event.InvolvedObject.Namespace, event.Reason, message); err != nil {
 			return err
 		}
 	}
