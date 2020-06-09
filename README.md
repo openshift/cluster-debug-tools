@@ -10,6 +10,7 @@ cluster-debug-tools
 * `analyze-e2e`     inspects the artifacts gathered during e2e-aws run and analyze them.
 * `audit`           inspects the audit logs captured during CI test run.
 * `event`           inspects the event logs captured during CI test run.
+* `event-filter`    filters the event logs captured during CI test run on a webpage (based on jqgrid).
 * `inspect-certs`   inspects the certs, keys, and ca-bundles in a set of resources.
 * `revision-status` counts failed installer pods and current revision of static pods.
 
