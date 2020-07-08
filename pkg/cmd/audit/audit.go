@@ -39,6 +39,7 @@ type AuditOptions struct {
 
 	verbs        []string
 	resources    []string
+	subresources []string
 	namespaces   []string
 	names        []string
 	users        []string
@@ -87,6 +88,7 @@ func NewCmdAudit(parentName string, streams genericclioptions.IOStreams) *cobra.
 	cmd.Flags().StringSliceVar(&o.uids, "uid", o.uids, "Only match specific UIDs")
 	cmd.Flags().StringSliceVar(&o.verbs, "verb", o.verbs, "Filter result of search to only contain the specified verb (eg. 'update', 'get', etc..)")
 	cmd.Flags().StringSliceVar(&o.resources, "resource", o.resources, "Filter result of search to only contain the specified resource.)")
+	cmd.Flags().StringSliceVar(&o.subresources, "subresource", o.subresources, "Filter result of search to only contain the specified subresources.  \"-*\" means no subresource)")
 	cmd.Flags().StringSliceVarP(&o.namespaces, "namespace", "n", o.namespaces, "Filter result of search to only contain the specified namespace.)")
 	cmd.Flags().StringSliceVar(&o.names, "name", o.names, "Filter result of search to only contain the specified name.)")
 	cmd.Flags().StringSliceVar(&o.users, "user", o.users, "Filter result of search to only contain the specified user.)")
@@ -94,7 +96,6 @@ func NewCmdAudit(parentName string, streams genericclioptions.IOStreams) *cobra.
 	cmd.Flags().BoolVar(&o.failedOnly, "failed-only", false, "Filter result of search to only contain http failures.)")
 	cmd.Flags().StringVar(&o.beforeString, "before", o.beforeString, "Filter result of search to only before a timestamp.)")
 	cmd.Flags().StringVar(&o.afterString, "after", o.afterString, "Filter result of search to only after a timestamp.)")
-
 	return cmd
 }
 
@@ -144,6 +145,9 @@ func (o *AuditOptions) Run() error {
 		}
 
 		filters = append(filters, &FilterByResources{Resources: resources})
+	}
+	if len(o.subresources) > 0 {
+		filters = append(filters, &FilterBySubresources{Subresources: sets.NewString(o.subresources...)})
 	}
 	if len(o.users) > 0 {
 		filters = append(filters, &FilterByUser{Users: sets.NewString(o.users...)})

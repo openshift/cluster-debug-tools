@@ -55,9 +55,31 @@ func (f *FilterByNamespaces) FilterEvents(events ...*auditv1.Event) []*auditv1.E
 	ret := []*auditv1.Event{}
 	for i := range events {
 		event := events[i]
-		ns, _, _ := URIToParts(event.RequestURI)
+		ns, _, _, _ := URIToParts(event.RequestURI)
 
 		if util.AcceptString(f.Namespaces, ns) {
+			ret = append(ret, event)
+		}
+	}
+
+	return ret
+}
+
+type FilterBySubresources struct {
+	Subresources sets.String
+}
+
+func (f *FilterBySubresources) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
+	ret := []*auditv1.Event{}
+	for i := range events {
+		event := events[i]
+		_, _, _, subresource := URIToParts(event.RequestURI)
+
+		if f.Subresources.Has("-*") && len(f.Subresources) == 1 && len(subresource) == 0 {
+			ret = append(ret, event)
+			continue
+		}
+		if util.AcceptString(f.Subresources, subresource) {
 			ret = append(ret, event)
 		}
 	}
@@ -73,7 +95,7 @@ func (f *FilterByNames) FilterEvents(events ...*auditv1.Event) []*auditv1.Event 
 	ret := []*auditv1.Event{}
 	for i := range events {
 		event := events[i]
-		_, _, name := URIToParts(event.RequestURI)
+		_, _, name, _ := URIToParts(event.RequestURI)
 
 		if util.AcceptString(f.Names, name) {
 			ret = append(ret, event)
@@ -152,7 +174,7 @@ func (f *FilterByResources) FilterEvents(events ...*auditv1.Event) []*auditv1.Ev
 	ret := []*auditv1.Event{}
 	for i := range events {
 		event := events[i]
-		_, gvr, _ := URIToParts(event.RequestURI)
+		_, gvr, _, _ := URIToParts(event.RequestURI)
 		antiMatch := schema.GroupResource{Resource: "-" + gvr.Resource, Group: gvr.Group}
 
 		// check for an anti-match
@@ -199,7 +221,7 @@ func (f *FilterByResources) FilterEvents(events ...*auditv1.Event) []*auditv1.Ev
 	return ret
 }
 
-func URIToParts(uri string) (string, schema.GroupVersionResource, string) {
+func URIToParts(uri string) (string, schema.GroupVersionResource, string, string) {
 	ns := ""
 	gvr := schema.GroupVersionResource{}
 	name := ""
@@ -211,7 +233,7 @@ func URIToParts(uri string) (string, schema.GroupVersionResource, string) {
 	}
 	parts := strings.Split(uri, "/")
 	if len(parts) == 0 {
-		return ns, gvr, name
+		return ns, gvr, name, ""
 	}
 	// /api/v1/namespaces/<name>
 	if parts[0] == "api" {
@@ -219,18 +241,18 @@ func URIToParts(uri string) (string, schema.GroupVersionResource, string) {
 			gvr.Version = parts[1]
 		}
 		if len(parts) < 3 {
-			return ns, gvr, name
+			return ns, gvr, name, ""
 		}
 
 		if parts[2] != "namespaces" {
 			gvr.Resource = parts[2]
 			if len(parts) >= 4 {
 				name = parts[3]
-				return ns, gvr, name
+				return ns, gvr, name, ""
 			}
 		}
 		if len(parts) < 4 {
-			return ns, gvr, name
+			return ns, gvr, name, ""
 		}
 
 		ns = parts[3]
@@ -240,11 +262,14 @@ func URIToParts(uri string) (string, schema.GroupVersionResource, string) {
 		if len(parts) >= 6 {
 			name = parts[5]
 		}
-		return ns, gvr, name
+		if len(parts) >= 7 {
+			return ns, gvr, name, strings.Join(parts[6:], "/")
+		}
+		return ns, gvr, name, ""
 	}
 
 	if parts[0] != "apis" {
-		return ns, gvr, name
+		return ns, gvr, name, ""
 	}
 
 	// /apis/group/v1/namespaces/<name>
@@ -255,18 +280,18 @@ func URIToParts(uri string) (string, schema.GroupVersionResource, string) {
 		gvr.Version = parts[2]
 	}
 	if len(parts) < 4 {
-		return ns, gvr, name
+		return ns, gvr, name, ""
 	}
 
 	if parts[3] != "namespaces" {
 		gvr.Resource = parts[3]
 		if len(parts) >= 5 {
 			name = parts[4]
-			return ns, gvr, name
+			return ns, gvr, name, ""
 		}
 	}
 	if len(parts) < 5 {
-		return ns, gvr, name
+		return ns, gvr, name, ""
 	}
 
 	ns = parts[4]
@@ -276,7 +301,10 @@ func URIToParts(uri string) (string, schema.GroupVersionResource, string) {
 	if len(parts) >= 7 {
 		name = parts[6]
 	}
-	return ns, gvr, name
+	if len(parts) >= 8 {
+		return ns, gvr, name, strings.Join(parts[7:], "/")
+	}
+	return ns, gvr, name, ""
 }
 
 type FilterByAfter struct {
