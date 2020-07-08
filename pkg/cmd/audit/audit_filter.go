@@ -244,13 +244,34 @@ func URIToParts(uri string) (string, schema.GroupVersionResource, string, string
 			return ns, gvr, name, ""
 		}
 
-		if parts[2] != "namespaces" {
+		switch {
+		case parts[2] != "namespaces": // cluster scoped request that is not a namespace
 			gvr.Resource = parts[2]
 			if len(parts) >= 4 {
 				name = parts[3]
 				return ns, gvr, name, ""
 			}
+		case len(parts) == 3 && parts[2] == "namespaces": // a namespace request /api/v1/namespaces
+			gvr.Resource = parts[2]
+			return "", gvr, "", ""
+
+		case len(parts) == 4 && parts[2] == "namespaces": // a namespace request /api/v1/namespaces/<name>
+			gvr.Resource = parts[2]
+			name = parts[3]
+			ns = parts[3]
+			return ns, gvr, name, ""
+
+		case len(parts) == 5 && parts[2] == "namespaces" && parts[4] == "finalize", // a namespace request /api/v1/namespaces/<name>/finalize
+			len(parts) == 5 && parts[2] == "namespaces" && parts[4] == "status": // a namespace request /api/v1/namespaces/<name>/status
+			gvr.Resource = parts[2]
+			name = parts[3]
+			ns = parts[3]
+			return ns, gvr, name, parts[4]
+
+		default:
+			// this is not a cluster scoped request and not a namespace request we recognize
 		}
+
 		if len(parts) < 4 {
 			return ns, gvr, name, ""
 		}
