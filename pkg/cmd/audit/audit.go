@@ -172,6 +172,8 @@ func (o *AuditOptions) Run() error {
 			PrintTopByUserAuditEvents(o.Out, events)
 		case "resource":
 			PrintTopByResourceAuditEvents(o.Out, events)
+		case "httpstatus":
+			PrintTopByHTTPStatusCodeAuditEvents(o.Out, events)
 		default:
 			return fmt.Errorf("unsupported -by value")
 		}

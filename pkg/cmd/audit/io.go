@@ -12,6 +12,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"k8s.io/apimachinery/pkg/util/sets"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
 )
 
@@ -301,4 +302,55 @@ func GetEvents(auditFilename string) ([]*auditv1.Event, error) {
 	})
 
 	return ret, err
+}
+
+func PrintTopByHTTPStatusCodeAuditEvents(writer io.Writer, events []*auditv1.Event) {
+	countHTTPStatusCode := map[int32][]*auditv1.Event{}
+
+	for _, event := range events {
+		if event.ResponseStatus == nil {
+			countHTTPStatusCode[-1] = append(countHTTPStatusCode[-1], event)
+			continue
+		}
+		countHTTPStatusCode[event.ResponseStatus.Code] = append(countHTTPStatusCode[event.ResponseStatus.Code], event)
+	}
+
+	result := map[int32][]*eventWithCounter{}
+	resultCounts := map[int32]int{}
+
+	for httpStatusCode, eventList := range countHTTPStatusCode {
+		resultCounts[httpStatusCode] = len(eventList)
+		countedEvents := []*eventWithCounter{}
+		for _, event := range eventList {
+			found := false
+			for i, countedEvent := range countedEvents {
+				if countedEvent.event.RequestURI == event.RequestURI && countedEvent.event.User.Username == event.User.Username {
+					countedEvents[i].count += 1
+					found = true
+					break
+				}
+			}
+			if !found {
+				countedEvents = append(countedEvents, &eventWithCounter{event: event, count: 1})
+			}
+		}
+
+		sort.Slice(countedEvents, func(i, j int) bool {
+			return countedEvents[i].count >= countedEvents[j].count
+		})
+		if len(countedEvents) <= 5 {
+			result[httpStatusCode] = countedEvents
+			continue
+		}
+		result[httpStatusCode] = countedEvents[0:5]
+	}
+
+	w := tabwriter.NewWriter(writer, 20, 0, 0, ' ', tabwriter.DiscardEmptyColumns)
+	defer w.Flush()
+
+	for _, httpStatusCode := range sets.Int32KeySet(result).List() {
+		eventWithCounter := result[httpStatusCode]
+		fmt.Fprintf(w, "\nTop 5 %d (of %d total hits):\n", httpStatusCode, resultCounts[httpStatusCode])
+		PrintAuditEventsWithCount(writer, eventWithCounter)
+	}
 }
