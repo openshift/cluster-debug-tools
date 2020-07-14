@@ -29,6 +29,9 @@ var (
 
 	# find CREATEs of everything except SAR and tokenreview
 	%[1]s audit -f audit.log --verb=create --resource=*.* --resource=-subjectaccessreviews.* --resource=-tokenreviews.*
+
+	# filter event by stages
+	%[1]s audit -f audit.log --verb=get --stage=ResponseComplete --output=top --by=verb
 `
 )
 
@@ -50,6 +53,7 @@ type AuditOptions struct {
 	topBy        string
 	beforeString string
 	afterString  string
+	stages       []string
 
 	genericclioptions.IOStreams
 }
@@ -57,6 +61,11 @@ type AuditOptions struct {
 func NewAuditOptions(streams genericclioptions.IOStreams) *AuditOptions {
 	return &AuditOptions{
 		IOStreams: streams,
+		stages: []string{
+			// We are making RequestReceived the default stage,
+			// this will provide a protection against double counting of events.
+			"RequestReceived",
+		},
 	}
 }
 
@@ -96,6 +105,8 @@ func NewCmdAudit(parentName string, streams genericclioptions.IOStreams) *cobra.
 	cmd.Flags().BoolVar(&o.failedOnly, "failed-only", false, "Filter result of search to only contain http failures.)")
 	cmd.Flags().StringVar(&o.beforeString, "before", o.beforeString, "Filter result of search to only before a timestamp.)")
 	cmd.Flags().StringVar(&o.afterString, "after", o.afterString, "Filter result of search to only after a timestamp.)")
+	cmd.Flags().StringSliceVarP(&o.stages, "stage", "s", o.stages, "Filter result by event stage (eg. 'RequestReceived', 'ResponseComplete'), if omitted all stages will be included)")
+
 	return cmd
 }
 
@@ -117,6 +128,9 @@ func (o *AuditOptions) Run() error {
 	}
 	if len(o.namespaces) > 0 {
 		filters = append(filters, &FilterByNamespaces{Namespaces: sets.NewString(o.namespaces...)})
+	}
+	if len(o.stages) > 0 {
+		filters = append(filters, &FilterByStage{Stages: sets.NewString(o.stages...)})
 	}
 	if len(o.beforeString) > 0 {
 		t, err := time.Parse(time.RFC3339, o.beforeString)
