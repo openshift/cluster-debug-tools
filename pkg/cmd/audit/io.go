@@ -194,8 +194,10 @@ func PrintTopByVerbAuditEvents(writer io.Writer, events []*auditv1.Event) {
 	}
 
 	result := map[string][]*eventWithCounter{}
+	resultCounts := map[string]int{}
 
 	for verb, eventList := range countVerbs {
+		resultCounts[verb] = len(eventList)
 		countedEvents := []*eventWithCounter{}
 		for _, event := range eventList {
 			found := false
@@ -224,8 +226,9 @@ func PrintTopByVerbAuditEvents(writer io.Writer, events []*auditv1.Event) {
 	w := tabwriter.NewWriter(writer, 20, 0, 0, ' ', tabwriter.DiscardEmptyColumns)
 	defer w.Flush()
 
-	for verb, eventWithCounter := range result {
-		fmt.Fprintf(w, "\nTop 5 %q:\n", strings.ToUpper(verb))
+	for _, verb := range sets.StringKeySet(result).List() {
+		eventWithCounter := result[verb]
+		fmt.Fprintf(w, "\nTop 5 %q (of %d total hits):\n", strings.ToUpper(verb), resultCounts[verb])
 		PrintAuditEventsWithCount(writer, eventWithCounter)
 	}
 }
