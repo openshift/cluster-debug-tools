@@ -328,6 +328,29 @@ func URIToParts(uri string) (string, schema.GroupVersionResource, string, string
 	return ns, gvr, name, ""
 }
 
+type FilterByStage struct {
+	Stages sets.String
+}
+
+func (f *FilterByStage) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
+	// in case we end up calling the filter with an empty set of stage then we have nothing to filter.
+	if len(f.Stages) == 0 {
+		return events
+	}
+
+	ret := []*auditv1.Event{}
+	for i := range events {
+		event := events[i]
+
+		// TODO: an event not having a stage, what do we do?
+		if f.Stages.Has(string(event.Stage)) {
+			ret = append(ret, event)
+		}
+	}
+
+	return ret
+}
+
 type FilterByAfter struct {
 	After time.Time
 }
