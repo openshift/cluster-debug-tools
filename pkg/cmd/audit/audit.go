@@ -178,11 +178,11 @@ func (o *AuditOptions) Run() error {
 		return err
 	}
 	events = filters.FilterEvents(events...)
-
 	switch o.output {
 	case "":
 		PrintAuditEvents(o.Out, events)
 	case "top":
+		PrintSummary(o.Out, events)
 		switch o.topBy {
 		case "verb":
 			PrintTopByVerbAuditEvents(o.Out, events)
