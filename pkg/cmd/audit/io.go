@@ -357,3 +357,37 @@ func PrintTopByHTTPStatusCodeAuditEvents(writer io.Writer, events []*auditv1.Eve
 		PrintAuditEventsWithCount(writer, eventWithCounter)
 	}
 }
+
+func PrintTopByNamespace(writer io.Writer, events []*auditv1.Event) {
+	countNamespaces := map[string][]*auditv1.Event{}
+
+	for _, event := range events {
+		// for a cluster scoped resource namespace will be empty.
+		namespace, _, _, _ := URIToParts(event.RequestURI)
+		countNamespaces[namespace] = append(countNamespaces[namespace], event)
+	}
+
+	type namespaceWithCount struct {
+		name  string
+		count int
+	}
+	result := []namespaceWithCount{}
+
+	for namespace, namespaceEvents := range countNamespaces {
+		result = append(result, namespaceWithCount{name: namespace, count: len(namespaceEvents)})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].count >= result[j].count
+	})
+
+	w := tabwriter.NewWriter(writer, 20, 0, 0, ' ', tabwriter.DiscardEmptyColumns)
+	defer w.Flush()
+
+	if len(result) > 20 {
+		result = result[0:20]
+	}
+
+	for _, r := range result {
+		fmt.Fprintf(w, "%dx\t %s\n", r.count, r.name)
+	}
+}
