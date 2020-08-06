@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"k8s.io/apimachinery/pkg/util/sets"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
@@ -390,4 +391,17 @@ func PrintTopByNamespace(writer io.Writer, events []*auditv1.Event) {
 	for _, r := range result {
 		fmt.Fprintf(w, "%dx\t %s\n", r.count, r.name)
 	}
+}
+
+func PrintSummary(w io.Writer, events []*auditv1.Event) {
+	if len(events) == 0 {
+		return
+	}
+
+	first := events[0]
+	last := events[len(events)-1]
+	duration := last.RequestReceivedTimestamp.Time.Sub(first.RequestReceivedTimestamp.Time)
+
+	fmt.Fprintf(w, "count: %d, first: %s, last: %s, duration: %s\n", len(events),
+		first.RequestReceivedTimestamp.Time.Format(time.RFC3339), last.RequestReceivedTimestamp.Time.Format(time.RFC3339), duration.String())
 }
