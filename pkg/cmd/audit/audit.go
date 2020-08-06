@@ -101,7 +101,7 @@ func NewCmdAudit(parentName string, streams genericclioptions.IOStreams) *cobra.
 	cmd.Flags().StringSliceVarP(&o.namespaces, "namespace", "n", o.namespaces, "Filter result of search to only contain the specified namespace.)")
 	cmd.Flags().StringSliceVar(&o.names, "name", o.names, "Filter result of search to only contain the specified name.)")
 	cmd.Flags().StringSliceVar(&o.users, "user", o.users, "Filter result of search to only contain the specified user.)")
-	cmd.Flags().StringVar(&o.topBy, "by", o.topBy, "Switch the top output format (eg. -o top -by [verb,user,resource]).")
+	cmd.Flags().StringVar(&o.topBy, "by", o.topBy, "Switch the top output format (eg. -o top -by [verb,user,resource,httpstatus,namespace]).")
 	cmd.Flags().BoolVar(&o.failedOnly, "failed-only", false, "Filter result of search to only contain http failures.)")
 	cmd.Flags().StringVar(&o.beforeString, "before", o.beforeString, "Filter result of search to only before a timestamp.)")
 	cmd.Flags().StringVar(&o.afterString, "after", o.afterString, "Filter result of search to only after a timestamp.)")
@@ -192,6 +192,8 @@ func (o *AuditOptions) Run() error {
 			PrintTopByResourceAuditEvents(o.Out, events)
 		case "httpstatus":
 			PrintTopByHTTPStatusCodeAuditEvents(o.Out, events)
+		case "namespace":
+			PrintTopByNamespace(o.Out, events)
 		default:
 			return fmt.Errorf("unsupported -by value")
 		}
