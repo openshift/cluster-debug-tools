@@ -231,6 +231,10 @@ func URIToParts(uri string) (string, schema.GroupVersionResource, string, string
 			uri = uri[1:]
 		}
 	}
+
+	// some request URL has query parameters like: /apis/image.openshift.io/v1/images?limit=500&resourceVersion=0
+	// we are not interested in the query parameters.
+	uri = strings.Split(uri, "?")[0]
 	parts := strings.Split(uri, "/")
 	if len(parts) == 0 {
 		return ns, gvr, name, ""
