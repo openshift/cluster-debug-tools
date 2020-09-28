@@ -169,7 +169,7 @@ func (o *AuditOptions) Run() error {
 		case "verb":
 			PrintTopByVerbAuditEvents(o.Out, events)
 		case "user":
-			PrintTopByUserAuditEvents(o.Out, events)
+			PrintTopByUserAuditEventsNew(o.Out, events)
 		case "resource":
 			PrintTopByResourceAuditEvents(o.Out, events)
 		default:
