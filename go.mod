@@ -3,6 +3,7 @@ module github.com/openshift/cluster-debug-tools
 go 1.12
 
 require (
+	github.com/mattn/go-sqlite3 v1.14.6
 	github.com/openshift/library-go v0.0.0-20190927184318-c355e2019bb3
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.3
