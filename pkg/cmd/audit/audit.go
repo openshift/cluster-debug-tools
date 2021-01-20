@@ -54,6 +54,7 @@ type AuditOptions struct {
 	beforeString string
 	afterString  string
 	stages       []string
+	dbFilename   string
 
 	genericclioptions.IOStreams
 }
@@ -106,6 +107,7 @@ func NewCmdAudit(parentName string, streams genericclioptions.IOStreams) *cobra.
 	cmd.Flags().StringVar(&o.beforeString, "before", o.beforeString, "Filter result of search to only before a timestamp.)")
 	cmd.Flags().StringVar(&o.afterString, "after", o.afterString, "Filter result of search to only after a timestamp.)")
 	cmd.Flags().StringSliceVarP(&o.stages, "stage", "s", o.stages, "Filter result by event stage (eg. 'RequestReceived', 'ResponseComplete'). Defaults to 'RequestReceived'.")
+	cmd.Flags().StringVarP(&o.dbFilename, "db-filename", "d", o.dbFilename, "The name of the file to write a sqlite db (only valid when --output=db). Will append to an existing db file.")
 
 	return cmd
 }
@@ -115,6 +117,9 @@ func (o *AuditOptions) Complete(command *cobra.Command, args []string) error {
 }
 
 func (o *AuditOptions) Validate() error {
+	if o.output == "db" && len(o.dbFilename) == 0 {
+		return fmt.Errorf("--db-filename is required when --output=db")
+	}
 	return nil
 }
 
@@ -205,6 +210,11 @@ func (o *AuditOptions) Run() error {
 			if err := encoder.Encode(event); err != nil {
 				return err
 			}
+		}
+	case "db":
+		err := WriteToDb(o.Out, o.filename, o.dbFilename, events)
+		if err != nil {
+			return err
 		}
 	default:
 		return fmt.Errorf("unsupported output format")
