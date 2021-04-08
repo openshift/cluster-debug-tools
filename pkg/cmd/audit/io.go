@@ -234,78 +234,79 @@ func PrintTopByVerbAuditEvents(writer io.Writer, events []*auditv1.Event) {
 	}
 }
 
-func GetEvents(auditFilename string) ([]*auditv1.Event, error) {
-	stat, err := os.Stat(auditFilename)
-	if err != nil {
-		return nil, err
-	}
-	if !stat.IsDir() {
-		file, err := os.Open(auditFilename)
+func GetEvents(auditFilenames ...string) ([]*auditv1.Event, error) {
+	ret := []*auditv1.Event{}
+	for _, auditFilename := range  auditFilenames {
+		stat, err := os.Stat(auditFilename)
 		if err != nil {
 			return nil, err
 		}
+		if !stat.IsDir() {
+			file, err := os.Open(auditFilename)
+			if err != nil {
+				return nil, err
+			}
 
-		scanner := bufio.NewScanner(file)
-		ret := []*auditv1.Event{}
+			scanner := bufio.NewScanner(file)
 
-		// each line in audit file use following format: `hostname {JSON}`, we are not interested in hostname,
-		// so lets parse out the events.
-		line := 0
-		for scanner.Scan() {
-			line++
-			auditBytes := scanner.Bytes()
-			if len(auditBytes) > 0 {
-				if string(auditBytes[0]) != "{" {
-					// strip the hostname part
-					hostnameEndPos := bytes.Index(auditBytes, []byte(" "))
-					if hostnameEndPos == -1 {
-						// oops something is wrong in the file?
-						continue
+			// each line in audit file use following format: `hostname {JSON}`, we are not interested in hostname,
+			// so lets parse out the events.
+			line := 0
+			for scanner.Scan() {
+				line++
+				auditBytes := scanner.Bytes()
+				if len(auditBytes) > 0 {
+					if string(auditBytes[0]) != "{" {
+						// strip the hostname part
+						hostnameEndPos := bytes.Index(auditBytes, []byte(" "))
+						if hostnameEndPos == -1 {
+							// oops something is wrong in the file?
+							continue
+						}
+
+						auditBytes = auditBytes[hostnameEndPos:]
 					}
-
-					auditBytes = auditBytes[hostnameEndPos:]
 				}
-			}
 
-			// shame, shame shame... we have to copy out the apiserver/apis/audit/v1alpha1.Event because adding it as dependency
-			// will cause mess in flags...
-			eventObj := &auditv1.Event{}
-			if err := json.Unmarshal(auditBytes, eventObj); err != nil {
-				return nil, fmt.Errorf("unable to decode %q line %d: %s to audit event: %v", auditFilename, line, string(auditBytes), err)
-			}
+				// shame, shame shame... we have to copy out the apiserver/apis/audit/v1alpha1.Event because adding it as dependency
+				// will cause mess in flags...
+				eventObj := &auditv1.Event{}
+				if err := json.Unmarshal(auditBytes, eventObj); err != nil {
+					return nil, fmt.Errorf("unable to decode %q line %d: %s to audit event: %v", auditFilename, line, string(auditBytes), err)
+				}
 
-			// Add to index
-			ret = append(ret, eventObj)
+				// Add to index
+				ret = append(ret, eventObj)
+			}
+			continue
 		}
 
-		return ret, nil
-	}
+		// it was a directory, recurse.
+		err = filepath.Walk(auditFilename,
+			func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+				if info.Name() == stat.Name() {
+					return nil
+				}
+				newEvents, err := GetEvents(path)
+				if err != nil {
+					return err
+				}
+				ret = append(ret, newEvents...)
 
-	// it was a directory, recurse.
-	ret := []*auditv1.Event{}
-	err = filepath.Walk(auditFilename,
-		func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if info.Name() == stat.Name() {
 				return nil
-			}
-			newEvents, err := GetEvents(path)
-			if err != nil {
-				return err
-			}
-			ret = append(ret, newEvents...)
+			})
 
-			return nil
-		})
+	}
 
 	// sort events by time
 	sort.Slice(ret, func(i, j int) bool {
 		return ret[i].RequestReceivedTimestamp.Time.Before(ret[j].RequestReceivedTimestamp.Time)
 	})
 
-	return ret, err
+	return ret, nil
 }
 
 func PrintTopByHTTPStatusCodeAuditEvents(writer io.Writer, events []*auditv1.Event) {
