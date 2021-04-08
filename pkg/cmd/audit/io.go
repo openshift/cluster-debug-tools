@@ -3,6 +3,7 @@ package audit
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -253,17 +254,22 @@ func getEvents(auditFilenames ...string) ([]*auditv1.Event, int, error) {
 			return nil, 0, err
 		}
 		if !stat.IsDir() {
-			// if we're a gz file, skip for now
-			if strings.HasSuffix(auditFilename, ".gz") {
-				continue
-			}
-
 			file, err := os.Open(auditFilename)
 			if err != nil {
 				return nil, 0, err
 			}
 
-			scanner := bufio.NewScanner(file)
+			var scanner *bufio.Scanner
+			// if we're a gz file, unzip
+			if strings.HasSuffix(auditFilename, ".gz") {
+				zw, err := gzip.NewReader(file)
+				if err != nil {
+					return nil, 0, err
+				}
+				scanner = bufio.NewScanner(zw)
+			} else {
+				scanner = bufio.NewScanner(file)
+			}
 
 			// each line in audit file use following format: `hostname {JSON}`, we are not interested in hostname,
 			// so lets parse out the events.
