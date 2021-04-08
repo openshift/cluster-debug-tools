@@ -64,7 +64,7 @@ func NewAuditOptions(streams genericclioptions.IOStreams) *AuditOptions {
 		stages: []string{
 			// We are making RequestReceived the default stage,
 			// this will provide a protection against double counting of events.
-			"RequestReceived",
+			"ResponseComplete",
 		},
 	}
 }
