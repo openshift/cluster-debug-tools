@@ -11,8 +11,11 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
+
+	"k8s.io/apimachinery/pkg/util/errors"
 
 	"k8s.io/klog"
 
@@ -242,6 +245,12 @@ func GetEvents(auditFilenames ...string) ([]*auditv1.Event, error) {
 	if readFailures > 0 {
 		fmt.Fprintf(os.Stderr, "had %d line read failures\n", readFailures)
 	}
+
+	// sort events by time
+	sort.Slice(ret, func(i, j int) bool {
+		return ret[i].RequestReceivedTimestamp.Time.Before(ret[j].RequestReceivedTimestamp.Time)
+	})
+
 	return ret, err
 }
 
@@ -305,6 +314,9 @@ func getEvents(auditFilenames ...string) ([]*auditv1.Event, int, error) {
 			continue
 		}
 
+		localLock := sync.Mutex{}
+		waiters := sync.WaitGroup{}
+		errs := []error{}
 		// it was a directory, recurse.
 		err = filepath.Walk(auditFilename,
 			func(path string, info os.FileInfo, err error) error {
@@ -314,22 +326,27 @@ func getEvents(auditFilenames ...string) ([]*auditv1.Event, int, error) {
 				if info.Name() == stat.Name() {
 					return nil
 				}
-				newEvents, readFailures, err := getEvents(path)
-				failures += readFailures
-				if err != nil {
-					return err
-				}
-				ret = append(ret, newEvents...)
+				waiters.Add(1)
+				go func() {
+					defer waiters.Done()
+					newEvents, readFailures, err := getEvents(path)
 
+					localLock.Lock()
+					defer localLock.Unlock()
+					failures += readFailures
+					ret = append(ret, newEvents...)
+					errs = append(errs, err)
+				}()
 				return nil
 			})
-
+		waiters.Wait()
+		if err != nil {
+			return ret, failures, err
+		}
+		if len(errs) > 0 {
+			return ret, failures, errors.NewAggregate(errs)
+		}
 	}
-
-	// sort events by time
-	sort.Slice(ret, func(i, j int) bool {
-		return ret[i].RequestReceivedTimestamp.Time.Before(ret[j].RequestReceivedTimestamp.Time)
-	})
 
 	return ret, failures, nil
 }
