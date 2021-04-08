@@ -13,6 +13,8 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"k8s.io/klog"
+
 	"k8s.io/apimachinery/pkg/util/sets"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
 )
@@ -235,16 +237,30 @@ func PrintTopByVerbAuditEvents(writer io.Writer, events []*auditv1.Event) {
 }
 
 func GetEvents(auditFilenames ...string) ([]*auditv1.Event, error) {
+	ret, readFailures, err := getEvents(auditFilenames...)
+	if readFailures > 0 {
+		fmt.Fprintf(os.Stderr, "had %d line read failures\n", readFailures)
+	}
+	return ret, err
+}
+
+func getEvents(auditFilenames ...string) ([]*auditv1.Event, int, error) {
 	ret := []*auditv1.Event{}
-	for _, auditFilename := range  auditFilenames {
+	failures := 0
+	for _, auditFilename := range auditFilenames {
 		stat, err := os.Stat(auditFilename)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 		if !stat.IsDir() {
+			// if we're a gz file, skip for now
+			if strings.HasSuffix(auditFilename, ".gz") {
+				continue
+			}
+
 			file, err := os.Open(auditFilename)
 			if err != nil {
-				return nil, err
+				return nil, 0, err
 			}
 
 			scanner := bufio.NewScanner(file)
@@ -272,7 +288,9 @@ func GetEvents(auditFilenames ...string) ([]*auditv1.Event, error) {
 				// will cause mess in flags...
 				eventObj := &auditv1.Event{}
 				if err := json.Unmarshal(auditBytes, eventObj); err != nil {
-					return nil, fmt.Errorf("unable to decode %q line %d: %s to audit event: %v", auditFilename, line, string(auditBytes), err)
+					failures++
+					klog.V(1).Infof("unable to decode %q line %d: %s to audit event: %v\n", auditFilename, line, string(auditBytes), err)
+					continue
 				}
 
 				// Add to index
@@ -290,7 +308,8 @@ func GetEvents(auditFilenames ...string) ([]*auditv1.Event, error) {
 				if info.Name() == stat.Name() {
 					return nil
 				}
-				newEvents, err := GetEvents(path)
+				newEvents, readFailures, err := getEvents(path)
+				failures += readFailures
 				if err != nil {
 					return err
 				}
@@ -306,7 +325,7 @@ func GetEvents(auditFilenames ...string) ([]*auditv1.Event, error) {
 		return ret[i].RequestReceivedTimestamp.Time.Before(ret[j].RequestReceivedTimestamp.Time)
 	})
 
-	return ret, nil
+	return ret, failures, nil
 }
 
 func PrintTopByHTTPStatusCodeAuditEvents(writer io.Writer, events []*auditv1.Event) {
