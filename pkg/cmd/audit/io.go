@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"sync"
@@ -209,7 +211,7 @@ func PrintTopByVerbAuditEvents(writer io.Writer, events []*auditv1.Event) {
 		for _, event := range eventList {
 			found := false
 			for i, countedEvent := range countedEvents {
-				if countedEvent.event.RequestURI == event.RequestURI && countedEvent.event.User.Username == event.User.Username {
+				if IsEquivalentAuditURI(countedEvent.event.RequestURI, event.RequestURI) && countedEvent.event.User.Username == event.User.Username {
 					countedEvents[i].count += 1
 					found = true
 					break
@@ -445,7 +447,7 @@ func PrintTopByHTTPStatusCodeAuditEvents(writer io.Writer, events []*auditv1.Eve
 		for _, event := range eventList {
 			found := false
 			for i, countedEvent := range countedEvents {
-				if countedEvent.event.RequestURI == event.RequestURI && countedEvent.event.User.Username == event.User.Username {
+				if IsEquivalentAuditURI(countedEvent.event.RequestURI, event.RequestURI) && countedEvent.event.User.Username == event.User.Username {
 					countedEvents[i].count += 1
 					found = true
 					break
@@ -521,4 +523,43 @@ func PrintSummary(w io.Writer, events []*auditv1.Event) {
 
 	fmt.Fprintf(w, "count: %d, first: %s, last: %s, duration: %s\n", len(events),
 		first.RequestReceivedTimestamp.Time.Format(time.RFC3339), last.RequestReceivedTimestamp.Time.Format(time.RFC3339), duration.String())
+}
+
+// IsEquivalentAuditURI is fuzzy matcher that allows equivalence on non-exact matches.  This is important for watches and
+// for lists since they can pass a resourceversion and timeout which always diffs, but is rarely importantly different
+func IsEquivalentAuditURI(lhs, rhs string) bool {
+	if lhs == rhs {
+		return true
+	}
+	lhsURL, err := url.Parse("https://example.com" + lhs)
+	if err != nil {
+		panic(err)
+	}
+	rhsURL, err := url.Parse("https://example.com" + rhs)
+	if err != nil {
+		panic(err)
+	}
+	if lhsURL.Path != rhsURL.Path {
+		return false
+	}
+	lhsQueries := lhsURL.Query()
+	rhsQueries := lhsURL.Query()
+
+	lhsKeys := sets.StringKeySet(lhsQueries)
+	rhsKeys := sets.StringKeySet(rhsQueries)
+	lhsKeys.Delete("timeout", "timeoutSeconds", "resourceVersion", "continue")
+	rhsKeys.Delete("timeout", "timeoutSeconds", "resourceVersion", "continue")
+	if !lhsKeys.Equal(rhsKeys) {
+		return false
+	}
+
+	for _, queryName := range lhsKeys.List() {
+		lhsQueryValue := lhsQueries[queryName]
+		rhsQueryValue := rhsQueries[queryName]
+		if !reflect.DeepEqual(lhsQueryValue, rhsQueryValue) {
+			return false
+		}
+	}
+
+	return true
 }
