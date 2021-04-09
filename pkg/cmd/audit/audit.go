@@ -47,7 +47,7 @@ type AuditOptions struct {
 	names        []string
 	users        []string
 	uids         []string
-	filename     string
+	filenames    []string
 	failedOnly   bool
 	output       string
 	topBy        string
@@ -64,7 +64,7 @@ func NewAuditOptions(streams genericclioptions.IOStreams) *AuditOptions {
 		stages: []string{
 			// We are making RequestReceived the default stage,
 			// this will provide a protection against double counting of events.
-			"RequestReceived",
+			"ResponseComplete",
 		},
 	}
 }
@@ -92,7 +92,7 @@ func NewCmdAudit(parentName string, streams genericclioptions.IOStreams) *cobra.
 		},
 	}
 
-	cmd.Flags().StringVarP(&o.filename, "filename", "f", o.filename, "Search for audit logs that contains specified URI")
+	cmd.Flags().StringSliceVarP(&o.filenames, "filename", "f", o.filenames, "Search for audit logs that contains specified URI")
 	cmd.Flags().StringVarP(&o.output, "output", "o", o.output, "Choose your output format")
 	cmd.Flags().StringSliceVar(&o.uids, "uid", o.uids, "Only match specific UIDs")
 	cmd.Flags().StringSliceVar(&o.verbs, "verb", o.verbs, "Filter result of search to only contain the specified verb (eg. 'update', 'get', etc..)")
@@ -173,7 +173,7 @@ func (o *AuditOptions) Run() error {
 		filters = append(filters, &FilterByFailures{})
 	}
 
-	events, err := GetEvents(o.filename)
+	events, err := GetEvents(o.filenames...)
 	if err != nil {
 		return err
 	}

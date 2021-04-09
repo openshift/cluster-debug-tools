@@ -3,6 +3,7 @@ package audit
 import (
 	"bufio"
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,8 +11,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
+
+	"k8s.io/apimachinery/pkg/util/errors"
+
+	"k8s.io/klog"
 
 	"k8s.io/apimachinery/pkg/util/sets"
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
@@ -234,55 +240,159 @@ func PrintTopByVerbAuditEvents(writer io.Writer, events []*auditv1.Event) {
 	}
 }
 
-func GetEvents(auditFilename string) ([]*auditv1.Event, error) {
+func GetEvents(auditFilenames ...string) ([]*auditv1.Event, error) {
+	ret, readFailures, err := getEventFromManyFiles(auditFilenames...)
+	if readFailures > 0 {
+		fmt.Fprintf(os.Stderr, "had %d line read failures\n", readFailures)
+	}
+
+	// sort events by time
+	sort.Slice(ret, func(i, j int) bool {
+		return ret[i].RequestReceivedTimestamp.Time.Before(ret[j].RequestReceivedTimestamp.Time)
+	})
+
+	return ret, err
+}
+
+func getEventFromManyFiles(auditFilenames ...string) ([]*auditv1.Event, int, error) {
+	ret := []*auditv1.Event{}
+	failures := 0
+	for _, auditFilename := range auditFilenames {
+		stat, err := os.Stat(auditFilename)
+		if err != nil {
+			return nil, 0, err
+		}
+		if !stat.IsDir() {
+			var localEvents []*auditv1.Event
+			var localFailures int
+			var localErr error
+			if strings.HasSuffix(auditFilename, ".gz") {
+				localEvents, localFailures, localErr = getEventsFromZip(auditFilename)
+			} else {
+				localEvents, localFailures, localErr = getEventsFromFile(auditFilename)
+			}
+			if localErr != nil {
+				return nil, 0, localErr
+			}
+			failures += localFailures
+			ret = append(ret, localEvents...)
+			continue
+		}
+
+		localEvents, localFailures, localErr := getEventsFromDirectory(auditFilename)
+		if err != nil {
+			return nil, 0, localErr
+		}
+		failures += localFailures
+		ret = append(ret, localEvents...)
+	}
+
+	return ret, failures, nil
+}
+
+func getEventsFromZip(auditFilename string) ([]*auditv1.Event, int, error) {
+	// TODO figure out if the zip is of an individual file or a directory
+	return getEventsFromZipFile(auditFilename)
+}
+
+func getEventsFromFile(auditFilename string) ([]*auditv1.Event, int, error) {
+	if strings.HasSuffix(auditFilename, ".gz") {
+		return nil, 0, fmt.Errorf("is a zip")
+	}
+
 	stat, err := os.Stat(auditFilename)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
+	}
+	if stat.IsDir() {
+		return nil, 0, fmt.Errorf("wasn a directory")
+	}
+	file, err := os.Open(auditFilename)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	scanner := bufio.NewScanner(file)
+	return getEventsFromScanner(auditFilename, scanner)
+}
+
+func getEventsFromZipFile(auditFilename string) ([]*auditv1.Event, int, error) {
+	if !strings.HasSuffix(auditFilename, ".gz") {
+		return nil, 0, fmt.Errorf("not a zip")
+	}
+
+	stat, err := os.Stat(auditFilename)
+	if err != nil {
+		return nil, 0, err
+	}
+	if stat.IsDir() {
+		return nil, 0, fmt.Errorf("wasn a directory")
+	}
+	file, err := os.Open(auditFilename)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	zw, err := gzip.NewReader(file)
+	if err != nil {
+		return nil, 0, err
+	}
+	scanner := bufio.NewScanner(zw)
+	return getEventsFromScanner(auditFilename, scanner)
+}
+
+func getEventsFromScanner(auditFilename string, scanner *bufio.Scanner) ([]*auditv1.Event, int, error) {
+	ret := []*auditv1.Event{}
+	failures := 0
+
+	// each line in audit file use following format: `hostname {JSON}`, we are not interested in hostname,
+	// so lets parse out the events.
+	line := 0
+	for scanner.Scan() {
+		line++
+		auditBytes := scanner.Bytes()
+		if len(auditBytes) > 0 {
+			if string(auditBytes[0]) != "{" {
+				// strip the hostname part
+				hostnameEndPos := bytes.Index(auditBytes, []byte(" "))
+				if hostnameEndPos == -1 {
+					// oops something is wrong in the file?
+					continue
+				}
+
+				auditBytes = auditBytes[hostnameEndPos:]
+			}
+		}
+
+		// shame, shame shame... we have to copy out the apiserver/apis/audit/v1alpha1.Event because adding it as dependency
+		// will cause mess in flags...
+		eventObj := &auditv1.Event{}
+		if err := json.Unmarshal(auditBytes, eventObj); err != nil {
+			failures++
+			klog.V(1).Infof("unable to decode %q line %d: %s to audit event: %v\n", auditFilename, line, string(auditBytes), err)
+			continue
+		}
+
+		// Add to index
+		ret = append(ret, eventObj)
+	}
+	return ret, failures, nil
+}
+func getEventsFromDirectory(auditFilename string) ([]*auditv1.Event, int, error) {
+	ret := []*auditv1.Event{}
+	failures := 0
+	stat, err := os.Stat(auditFilename)
+	if err != nil {
+		return nil, 0, err
 	}
 	if !stat.IsDir() {
-		file, err := os.Open(auditFilename)
-		if err != nil {
-			return nil, err
-		}
-
-		scanner := bufio.NewScanner(file)
-		ret := []*auditv1.Event{}
-
-		// each line in audit file use following format: `hostname {JSON}`, we are not interested in hostname,
-		// so lets parse out the events.
-		line := 0
-		for scanner.Scan() {
-			line++
-			auditBytes := scanner.Bytes()
-			if len(auditBytes) > 0 {
-				if string(auditBytes[0]) != "{" {
-					// strip the hostname part
-					hostnameEndPos := bytes.Index(auditBytes, []byte(" "))
-					if hostnameEndPos == -1 {
-						// oops something is wrong in the file?
-						continue
-					}
-
-					auditBytes = auditBytes[hostnameEndPos:]
-				}
-			}
-
-			// shame, shame shame... we have to copy out the apiserver/apis/audit/v1alpha1.Event because adding it as dependency
-			// will cause mess in flags...
-			eventObj := &auditv1.Event{}
-			if err := json.Unmarshal(auditBytes, eventObj); err != nil {
-				return nil, fmt.Errorf("unable to decode %q line %d: %s to audit event: %v", auditFilename, line, string(auditBytes), err)
-			}
-
-			// Add to index
-			ret = append(ret, eventObj)
-		}
-
-		return ret, nil
+		return nil, 0, fmt.Errorf("wasn't a directory")
 	}
 
+	localLock := sync.Mutex{}
+	waiters := sync.WaitGroup{}
+	errs := []error{}
 	// it was a directory, recurse.
-	ret := []*auditv1.Event{}
 	err = filepath.Walk(auditFilename,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
@@ -291,21 +401,28 @@ func GetEvents(auditFilename string) ([]*auditv1.Event, error) {
 			if info.Name() == stat.Name() {
 				return nil
 			}
-			newEvents, err := GetEvents(path)
-			if err != nil {
-				return err
-			}
-			ret = append(ret, newEvents...)
+			waiters.Add(1)
+			go func() {
+				defer waiters.Done()
+				newEvents, readFailures, err := getEventFromManyFiles(path)
 
+				localLock.Lock()
+				defer localLock.Unlock()
+				failures += readFailures
+				ret = append(ret, newEvents...)
+				errs = append(errs, err)
+			}()
 			return nil
 		})
+	waiters.Wait()
+	if err != nil {
+		return ret, failures, err
+	}
+	if len(errs) > 0 {
+		return ret, failures, errors.NewAggregate(errs)
+	}
 
-	// sort events by time
-	sort.Slice(ret, func(i, j int) bool {
-		return ret[i].RequestReceivedTimestamp.Time.Before(ret[j].RequestReceivedTimestamp.Time)
-	})
-
-	return ret, err
+	return ret, failures, nil
 }
 
 func PrintTopByHTTPStatusCodeAuditEvents(writer io.Writer, events []*auditv1.Event) {
