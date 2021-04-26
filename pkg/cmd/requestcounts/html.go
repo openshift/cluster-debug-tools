@@ -26,6 +26,15 @@ const byUserHTML = `
 <script>
 var chart = c3.generate({
     bindto: '#chart',
+	padding: {
+        top: 40,
+        right: 100,
+        bottom: 40,
+        left: 200,
+    },
+	size: {
+  		height: 2000
+	},
     data: {
 	rows: [
 //	    ['resource-1', 'resource-2', 'resource-3'],

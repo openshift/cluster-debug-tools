@@ -153,6 +153,10 @@ func dataToJavaScriptReplacer(orderedUsers, orderedResources []string, orderedDa
 func toData(userToResourceToCount map[string]map[string]int64, allResources sets.String) ([]string, []string, [][]string) {
 	userUsages := []userUsage{}
 	for user, resourceCount := range userToResourceToCount {
+		// skip users specific to e2e tests
+		if strings.Contains(user, "e2e-test-") {
+			continue
+		}
 		userUsage := userUsage{userKey: user}
 		for _, count := range resourceCount {
 			userUsage.userCount += count
@@ -160,6 +164,8 @@ func toData(userToResourceToCount map[string]map[string]int64, allResources sets
 		userUsages = append(userUsages, userUsage)
 	}
 	sort.Sort(sort.Reverse(userByMost(userUsages)))
+	// prune list to the top 50 so it renders in some reasonable time.
+	userUsages = userUsages[:20]
 
 	orderedUsers := []string{}
 	orderedResources := allResources.List()
