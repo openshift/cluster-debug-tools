@@ -42,7 +42,7 @@ func PrintAuditEvents(writer io.Writer, events []*auditv1.Event) {
 			code = event.ResponseStatus.Code
 		}
 		if _, err := fmt.Fprintf(w, "%s [%6s][%12s] [%3d]\t %s\t [%s]\n",
-			event.RequestReceivedTimestamp.Format("15:04:05"),
+			event.RequestReceivedTimestamp.UTC().Format("15:04:05"),
 			strings.ToUpper(event.Verb),
 			duration,
 			code,
@@ -86,7 +86,7 @@ func PrintAuditEventsWide(writer io.Writer, events []*auditv1.Event) {
 			code = event.ResponseStatus.Code
 		}
 		if _, err := fmt.Fprintf(w, "%s (%v) [%s][%s] [%d]\t %s\t [%s]\n",
-			event.RequestReceivedTimestamp.Format("15:04:05"),
+			event.RequestReceivedTimestamp.UTC().Format("15:04:05"),
 			event.AuditID,
 			strings.ToUpper(event.Verb),
 			duration,
