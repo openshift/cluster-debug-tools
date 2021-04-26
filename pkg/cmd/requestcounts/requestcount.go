@@ -21,6 +21,8 @@ type APIRequestCountOptions struct {
 	filename       string
 	outputFilename string
 
+	justTotals bool
+
 	by string
 
 	genericclioptions.IOStreams
@@ -29,6 +31,7 @@ type APIRequestCountOptions struct {
 func NewAPIRequestCountOptions(streams genericclioptions.IOStreams) *APIRequestCountOptions {
 	return &APIRequestCountOptions{
 		outputFilename: "requests-by-user.html",
+		justTotals:     true,
 		IOStreams:      streams,
 	}
 }
@@ -99,6 +102,9 @@ func (o *APIRequestCountOptions) Run() error {
 	}))
 
 	orderedUsers, orderedResources, orderedData := toData(userToResourceToCount, allResources)
+	if o.justTotals {
+		orderedUsers, orderedResources, orderedData = toJustOperatorTotals(userToResourceToCount, allResources)
+	}
 	jsReplacer := dataToJavaScriptReplacer(orderedUsers, orderedResources, orderedData)
 	byUserHTMLPage := jsReplacer.Replace(byUserHTML)
 
@@ -154,7 +160,7 @@ func toData(userToResourceToCount map[string]map[string]int64, allResources sets
 	userUsages := []userUsage{}
 	for user, resourceCount := range userToResourceToCount {
 		// skip users specific to e2e tests
-		if strings.Contains(user, "e2e-test-") {
+		if strings.Contains(user, "e2e-") {
 			continue
 		}
 		userUsage := userUsage{userKey: user}
@@ -177,6 +183,40 @@ func toData(userToResourceToCount map[string]map[string]int64, allResources sets
 		for _, resource := range allResources.List() {
 			row = append(row, fmt.Sprintf("%d", userToResourceToCount[user.userKey][resource]))
 		}
+		data = append(data, row)
+	}
+
+	return orderedUsers, orderedResources, data
+}
+
+// returns the ordered users, ordered categories, ordered data rows
+func toJustOperatorTotals(userToResourceToCount map[string]map[string]int64, allResources sets.String) ([]string, []string, [][]string) {
+	userUsages := []userUsage{}
+	for user, resourceCount := range userToResourceToCount {
+		// skip users specific to e2e tests
+		// skip users specific to e2e tests
+		if strings.Contains(user, "e2e-") {
+			continue
+		}
+		if !strings.Contains(user, "-operator") {
+			continue
+		}
+		userUsage := userUsage{userKey: user}
+		for _, count := range resourceCount {
+			userUsage.userCount += count
+		}
+		userUsages = append(userUsages, userUsage)
+	}
+	sort.Sort(sort.Reverse(userByMost(userUsages)))
+
+	orderedUsers := []string{}
+	orderedResources := []string{"total"}
+	data := [][]string{}
+	data = append(data, orderedResources)
+	for _, user := range userUsages {
+		orderedUsers = append(orderedUsers, user.userKey)
+		row := []string{}
+		row = append(row, fmt.Sprintf("%d", user.userCount))
 		data = append(data, row)
 	}
 
