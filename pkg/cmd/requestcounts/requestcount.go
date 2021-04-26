@@ -168,6 +168,7 @@ func toData(userToResourceToCount map[string]map[string]int64, allResources sets
 	for _, user := range orderedUsers {
 		row := []string{}
 		for _, resource := range allResources.List() {
+			fmt.Printf("#### %q %v %d\n", user, resource, userToResourceToCount[user][resource])
 			row = append(row, fmt.Sprintf("%d", userToResourceToCount[user][resource]))
 		}
 		data = append(data, row)
