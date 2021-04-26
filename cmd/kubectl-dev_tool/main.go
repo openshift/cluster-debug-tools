@@ -7,6 +7,7 @@ import (
 	"github.com/openshift/cluster-debug-tools/pkg/cmd/audit"
 	"github.com/openshift/cluster-debug-tools/pkg/cmd/certinspection"
 	"github.com/openshift/cluster-debug-tools/pkg/cmd/events"
+	"github.com/openshift/cluster-debug-tools/pkg/cmd/requestcounts"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -55,6 +56,7 @@ func NewCmdDevHelpers(streams genericclioptions.IOStreams) *cobra.Command {
 	cmd.AddCommand(mustgather.NewCmdRevisionStatus("openshift-dev-helpers", streams))
 	cmd.AddCommand(certinspection.NewCmdCertInspection(streams))
 	cmd.AddCommand(analyze_e2e.NewCmdAnalyze("openshift-dev-helpers", streams))
+	cmd.AddCommand(requestcounts.NewCmdAPIRequestCount("openshift-dev-helpers", streams))
 
 	return cmd
 }
