@@ -21,7 +21,8 @@ type APIRequestCountOptions struct {
 	filename       string
 	outputFilename string
 
-	justTotals bool
+	justTotals    bool
+	justOperators bool
 
 	by string
 
@@ -31,7 +32,8 @@ type APIRequestCountOptions struct {
 func NewAPIRequestCountOptions(streams genericclioptions.IOStreams) *APIRequestCountOptions {
 	return &APIRequestCountOptions{
 		outputFilename: "requests-by-user.html",
-		justTotals:     true,
+		justTotals:     false,
+		justOperators:  true,
 		IOStreams:      streams,
 	}
 }
@@ -88,8 +90,15 @@ func (o *APIRequestCountOptions) Run() error {
 	allResources := sets.String{}
 	fmt.Println(walkData(o.filename, func(counter *apiv1.APIRequestCount) error {
 		resource := counter.Name
-		allResources.Insert(resource)
 		resourceRequests := showAllRequestHistory(counter.Status)
+		if o.justOperators {
+			resourceRequests = showAllRequestHistoryForOperators(counter.Status)
+			if len(resourceRequests) == 0 { // only inspect resources we used.
+				return nil
+			}
+		}
+
+		allResources.Insert(resource)
 		currResourceUserCounts := pivotUserToResource(resource, resourceRequests)
 
 		for user, count := range currResourceUserCounts {
@@ -101,9 +110,9 @@ func (o *APIRequestCountOptions) Run() error {
 		return nil
 	}))
 
-	orderedUsers, orderedResources, orderedData := toData(userToResourceToCount, allResources)
+	orderedUsers, orderedResources, orderedData := o.toData(userToResourceToCount, allResources)
 	if o.justTotals {
-		orderedUsers, orderedResources, orderedData = toJustOperatorTotals(userToResourceToCount, allResources)
+		orderedUsers, orderedResources, orderedData = o.toJustTotals(userToResourceToCount, allResources)
 	}
 	jsReplacer := dataToJavaScriptReplacer(orderedUsers, orderedResources, orderedData)
 	byUserHTMLPage := jsReplacer.Replace(byUserHTML)
@@ -156,11 +165,14 @@ func dataToJavaScriptReplacer(orderedUsers, orderedResources []string, orderedDa
 }
 
 // returns the ordered users, ordered categories, ordered data rows
-func toData(userToResourceToCount map[string]map[string]int64, allResources sets.String) ([]string, []string, [][]string) {
+func (o *APIRequestCountOptions) toData(userToResourceToCount map[string]map[string]int64, allResources sets.String) ([]string, []string, [][]string) {
 	userUsages := []userUsage{}
 	for user, resourceCount := range userToResourceToCount {
 		// skip users specific to e2e tests
 		if strings.Contains(user, "e2e-") {
+			continue
+		}
+		if o.justOperators && !strings.Contains(user, "-operator") {
 			continue
 		}
 		userUsage := userUsage{userKey: user}
@@ -171,7 +183,7 @@ func toData(userToResourceToCount map[string]map[string]int64, allResources sets
 	}
 	sort.Sort(sort.Reverse(userByMost(userUsages)))
 	// prune list to the top 50 so it renders in some reasonable time.
-	userUsages = userUsages[:20]
+	userUsages = userUsages[:40]
 
 	orderedUsers := []string{}
 	orderedResources := allResources.List()
@@ -190,7 +202,41 @@ func toData(userToResourceToCount map[string]map[string]int64, allResources sets
 }
 
 // returns the ordered users, ordered categories, ordered data rows
-func toJustOperatorTotals(userToResourceToCount map[string]map[string]int64, allResources sets.String) ([]string, []string, [][]string) {
+func (o *APIRequestCountOptions) toJustTotals(userToResourceToCount map[string]map[string]int64, allResources sets.String) ([]string, []string, [][]string) {
+	userUsages := []userUsage{}
+	for user, resourceCount := range userToResourceToCount {
+		// skip users specific to e2e tests
+		// skip users specific to e2e tests
+		if strings.Contains(user, "e2e-") {
+			continue
+		}
+		if o.justOperators && !strings.Contains(user, "-operator") {
+			continue
+		}
+		userUsage := userUsage{userKey: user}
+		for _, count := range resourceCount {
+			userUsage.userCount += count
+		}
+		userUsages = append(userUsages, userUsage)
+	}
+	sort.Sort(sort.Reverse(userByMost(userUsages)))
+
+	orderedUsers := []string{}
+	orderedResources := []string{"total"}
+	data := [][]string{}
+	data = append(data, orderedResources)
+	for _, user := range userUsages {
+		orderedUsers = append(orderedUsers, user.userKey)
+		row := []string{}
+		row = append(row, fmt.Sprintf("%d", user.userCount))
+		data = append(data, row)
+	}
+
+	return orderedUsers, orderedResources, data
+}
+
+// returns the ordered users, ordered categories, ordered data rows
+func toJustOperatorDetails(userToResourceToCount map[string]map[string]int64, allResources sets.String) ([]string, []string, [][]string) {
 	userUsages := []userUsage{}
 	for user, resourceCount := range userToResourceToCount {
 		// skip users specific to e2e tests
@@ -330,6 +376,31 @@ func mergeMaps(prev map[string]map[string]int64, current map[string]map[string]i
 func showAllRequestHistory(requestStatus apiv1.APIRequestCountStatus) []apiv1.PerResourceAPIRequestLog {
 	return requestStatus.Last24h
 }
+
+func showAllRequestHistoryForOperators(requestStatus apiv1.APIRequestCountStatus) []apiv1.PerResourceAPIRequestLog {
+	hasOperator := false
+	for _, byHour := range requestStatus.Last24h {
+		for _, byNode := range byHour.ByNode {
+			for _, byUser := range byNode.ByUser {
+				if strings.Contains(byUser.UserName, "-operator") {
+					hasOperator = true
+					break
+				}
+			}
+			if hasOperator {
+				break
+			}
+		}
+		if hasOperator {
+			break
+		}
+	}
+	if !hasOperator {
+		return []apiv1.PerResourceAPIRequestLog{}
+	}
+	return requestStatus.Last24h
+}
+
 func showCurrentHourOnly(requestStatus apiv1.APIRequestCountStatus) []apiv1.PerResourceAPIRequestLog {
 	return []apiv1.PerResourceAPIRequestLog{requestStatus.CurrentHour}
 }
