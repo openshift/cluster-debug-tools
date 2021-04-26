@@ -135,7 +135,7 @@ func dataToJavaScriptReplacer(orderedUsers, orderedResources []string, orderedDa
 	orderDataStrings := []string{}
 	for i, rowData := range orderedData {
 		if i == 0 {
-			orderDataStrings = append(orderDataStrings, orderedResourceString)
+			orderDataStrings = append(orderDataStrings, orderedResourceString+", // resources")
 			continue
 		}
 		orderDataStrings = append(orderDataStrings, fmt.Sprintf("[%v], // %v", strings.Join(rowData, ", "), orderedUsers[i-1]))
@@ -165,11 +165,11 @@ func toData(userToResourceToCount map[string]map[string]int64, allResources sets
 	orderedResources := allResources.List()
 	data := [][]string{}
 	data = append(data, orderedResources)
-	for _, user := range orderedUsers {
+	for _, user := range userUsages {
+		orderedUsers = append(orderedUsers, user.userKey)
 		row := []string{}
 		for _, resource := range allResources.List() {
-			fmt.Printf("#### %q %v %d\n", user, resource, userToResourceToCount[user][resource])
-			row = append(row, fmt.Sprintf("%d", userToResourceToCount[user][resource]))
+			row = append(row, fmt.Sprintf("%d", userToResourceToCount[user.userKey][resource]))
 		}
 		data = append(data, row)
 	}
