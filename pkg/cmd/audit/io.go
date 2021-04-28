@@ -17,6 +17,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/wcharczuk/go-chart"
 	"k8s.io/apimachinery/pkg/util/errors"
 
 	"k8s.io/klog"
@@ -51,6 +52,7 @@ func PrintAuditEvents(writer io.Writer, events []*auditv1.Event) {
 			panic(err)
 		}
 	}
+
 }
 
 func PrintAuditEventsWithCount(writer io.Writer, events []*eventWithCounter) {
@@ -193,6 +195,64 @@ func PrintTopByResourceAuditEvents(writer io.Writer, events []*auditv1.Event) {
 	for _, item := range sortedResult {
 		fmt.Fprintf(w, "%dx\t %s\n", item.count, item.resource)
 	}
+}
+
+func PlotChart(args []string, events []*auditv1.Event) error {
+	groupBySeconds := map[time.Time]float64{}
+
+	for _, event := range events {
+		groupBySeconds[event.RequestReceivedTimestamp.Round(1*time.Second)]++
+	}
+
+	// sort events by timestamp
+	keys := make([]time.Time, 0)
+	for k := range groupBySeconds {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i].Before(keys[j])
+	})
+
+	// prepare chart
+	var xValues []time.Time
+	var yValues []float64
+	for _, k := range keys {
+		xValues = append(xValues, k)
+		yValues = append(yValues, groupBySeconds[k])
+	}
+
+	graph := chart.Chart{
+		XAxis: chart.XAxis{
+			ValueFormatter: chart.TimeValueFormatterWithFormat("15:04:05"),
+			Style: chart.Style{
+				Show:                true,
+				TextRotationDegrees: 65.0,
+			},
+		},
+		YAxis: chart.YAxis{
+			Style: chart.Style{
+				Show: true,
+			},
+		},
+		Series: []chart.Series{
+			chart.TimeSeries{
+				XValues: xValues,
+				YValues: yValues,
+			},
+		},
+	}
+
+	f, err := os.Create("output.png")
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	err = graph.Render(chart.PNG, f)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func PrintTopByVerbAuditEvents(writer io.Writer, events []*auditv1.Event) {
