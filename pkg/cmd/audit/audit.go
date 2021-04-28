@@ -32,6 +32,9 @@ var (
 
 	# filter event by stages
 	%[1]s audit -f audit.log --verb=get --stage=ResponseComplete --output=top --by=verb
+
+	# draw graph events
+	%[1]s audit -f audit.log --verb=watch --output=chart
 `
 )
 
@@ -101,7 +104,7 @@ func NewCmdAudit(parentName string, streams genericclioptions.IOStreams) *cobra.
 	cmd.Flags().StringSliceVarP(&o.namespaces, "namespace", "n", o.namespaces, "Filter result of search to only contain the specified namespace.)")
 	cmd.Flags().StringSliceVar(&o.names, "name", o.names, "Filter result of search to only contain the specified name.)")
 	cmd.Flags().StringSliceVar(&o.users, "user", o.users, "Filter result of search to only contain the specified user.)")
-	cmd.Flags().StringVar(&o.topBy, "by", o.topBy, "Switch the top output format (eg. -o top -by [verb,user,resource,httpstatus,namespace]).")
+	cmd.Flags().StringVar(&o.topBy, "by", o.topBy, "Switch the top output format (eg. -o top -by [verb,user,resource,httpstatus,namespace,chart]).")
 	cmd.Flags().BoolVar(&o.failedOnly, "failed-only", false, "Filter result of search to only contain http failures.)")
 	cmd.Flags().StringVar(&o.beforeString, "before", o.beforeString, "Filter result of search to only before a timestamp.)")
 	cmd.Flags().StringVar(&o.afterString, "after", o.afterString, "Filter result of search to only after a timestamp.)")
@@ -181,6 +184,10 @@ func (o *AuditOptions) Run() error {
 	switch o.output {
 	case "":
 		PrintAuditEvents(o.Out, events)
+	case "chart":
+		if err := PlotChart(o.args, events); err != nil {
+			return err
+		}
 	case "top":
 		PrintSummary(o.Out, events)
 		switch o.topBy {

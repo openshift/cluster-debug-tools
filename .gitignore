@@ -21,3 +21,5 @@
 *.out
 
 /kubectl-dev_tool
+/vendor
+output.png
