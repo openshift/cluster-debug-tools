@@ -98,7 +98,7 @@ func PrintAuditEventsWide(writer io.Writer, events []*auditv1.Event) {
 	}
 }
 
-func PrintTopByUserAuditEvents(writer io.Writer, events []*auditv1.Event) {
+func PrintTopByUserAuditEvents(writer io.Writer, numToDisplay int, events []*auditv1.Event) {
 	countUsers := map[string][]*auditv1.Event{}
 
 	for _, event := range events {
@@ -121,8 +121,8 @@ func PrintTopByUserAuditEvents(writer io.Writer, events []*auditv1.Event) {
 	w := tabwriter.NewWriter(writer, 20, 0, 0, ' ', tabwriter.DiscardEmptyColumns)
 	defer w.Flush()
 
-	if len(result) > 10 {
-		result = result[0:10]
+	if len(result) > numToDisplay {
+		result = result[0:numToDisplay]
 	}
 
 	for _, r := range result {
@@ -130,7 +130,7 @@ func PrintTopByUserAuditEvents(writer io.Writer, events []*auditv1.Event) {
 	}
 }
 
-func PrintTopByResourceAuditEvents(writer io.Writer, events []*auditv1.Event) {
+func PrintTopByResourceAuditEvents(writer io.Writer, numToDisplay int, events []*auditv1.Event) {
 	result := map[string]int64{}
 
 	for _, event := range events {
@@ -189,13 +189,16 @@ func PrintTopByResourceAuditEvents(writer io.Writer, events []*auditv1.Event) {
 	sort.Slice(sortedResult, func(i, j int) bool {
 		return sortedResult[i].count >= sortedResult[j].count
 	})
+	if len(sortedResult) > numToDisplay{
+		sortedResult = sortedResult[:numToDisplay]
+	}
 
 	for _, item := range sortedResult {
 		fmt.Fprintf(w, "%dx\t %s\n", item.count, item.resource)
 	}
 }
 
-func PrintTopByVerbAuditEvents(writer io.Writer, events []*auditv1.Event) {
+func PrintTopByVerbAuditEvents(writer io.Writer, numToDisplay int, events []*auditv1.Event) {
 	countVerbs := map[string][]*auditv1.Event{}
 
 	for _, event := range events {
@@ -225,11 +228,11 @@ func PrintTopByVerbAuditEvents(writer io.Writer, events []*auditv1.Event) {
 		sort.Slice(countedEvents, func(i, j int) bool {
 			return countedEvents[i].count >= countedEvents[j].count
 		})
-		if len(countedEvents) <= 5 {
+		if len(countedEvents) <= numToDisplay {
 			result[verb] = countedEvents
 			continue
 		}
-		result[verb] = countedEvents[0:5]
+		result[verb] = countedEvents[0:numToDisplay]
 	}
 
 	w := tabwriter.NewWriter(writer, 20, 0, 0, ' ', tabwriter.DiscardEmptyColumns)
@@ -237,7 +240,7 @@ func PrintTopByVerbAuditEvents(writer io.Writer, events []*auditv1.Event) {
 
 	for _, verb := range sets.StringKeySet(result).List() {
 		eventWithCounter := result[verb]
-		fmt.Fprintf(w, "\nTop 5 %q (of %d total hits):\n", strings.ToUpper(verb), resultCounts[verb])
+		fmt.Fprintf(w, "\nTop %d %q (of %d total hits):\n", numToDisplay, strings.ToUpper(verb), resultCounts[verb])
 		PrintAuditEventsWithCount(writer, eventWithCounter)
 	}
 }
@@ -427,7 +430,7 @@ func getEventsFromDirectory(auditFilename string) ([]*auditv1.Event, int, error)
 	return ret, failures, nil
 }
 
-func PrintTopByHTTPStatusCodeAuditEvents(writer io.Writer, events []*auditv1.Event) {
+func PrintTopByHTTPStatusCodeAuditEvents(writer io.Writer, numToDisplay int, events []*auditv1.Event) {
 	countHTTPStatusCode := map[int32][]*auditv1.Event{}
 
 	for _, event := range events {
@@ -461,11 +464,11 @@ func PrintTopByHTTPStatusCodeAuditEvents(writer io.Writer, events []*auditv1.Eve
 		sort.Slice(countedEvents, func(i, j int) bool {
 			return countedEvents[i].count >= countedEvents[j].count
 		})
-		if len(countedEvents) <= 5 {
+		if len(countedEvents) <= numToDisplay {
 			result[httpStatusCode] = countedEvents
 			continue
 		}
-		result[httpStatusCode] = countedEvents[0:5]
+		result[httpStatusCode] = countedEvents[0:numToDisplay]
 	}
 
 	w := tabwriter.NewWriter(writer, 20, 0, 0, ' ', tabwriter.DiscardEmptyColumns)
@@ -473,12 +476,12 @@ func PrintTopByHTTPStatusCodeAuditEvents(writer io.Writer, events []*auditv1.Eve
 
 	for _, httpStatusCode := range sets.Int32KeySet(result).List() {
 		eventWithCounter := result[httpStatusCode]
-		fmt.Fprintf(w, "\nTop 5 %d (of %d total hits):\n", httpStatusCode, resultCounts[httpStatusCode])
+		fmt.Fprintf(w, "\nTop %d %d (of %d total hits):\n", numToDisplay, httpStatusCode, resultCounts[httpStatusCode])
 		PrintAuditEventsWithCount(writer, eventWithCounter)
 	}
 }
 
-func PrintTopByNamespace(writer io.Writer, events []*auditv1.Event) {
+func PrintTopByNamespace(writer io.Writer, numToDisplay int, events []*auditv1.Event) {
 	countNamespaces := map[string][]*auditv1.Event{}
 
 	for _, event := range events {
@@ -503,8 +506,8 @@ func PrintTopByNamespace(writer io.Writer, events []*auditv1.Event) {
 	w := tabwriter.NewWriter(writer, 20, 0, 0, ' ', tabwriter.DiscardEmptyColumns)
 	defer w.Flush()
 
-	if len(result) > 20 {
-		result = result[0:20]
+	if len(result) > numToDisplay {
+		result = result[0:numToDisplay]
 	}
 
 	for _, r := range result {
