@@ -4,6 +4,7 @@ import (
 	"os"
 
 	analyze_e2e "github.com/openshift/cluster-debug-tools/pkg/cmd/analyze-e2e"
+	apirequestcount "github.com/openshift/cluster-debug-tools/pkg/cmd/api-request-count"
 	"github.com/openshift/cluster-debug-tools/pkg/cmd/audit"
 	"github.com/openshift/cluster-debug-tools/pkg/cmd/certinspection"
 	"github.com/openshift/cluster-debug-tools/pkg/cmd/events"
