@@ -17,21 +17,21 @@ import (
 
 var (
 	example = `
-    # count resources used by users and generate a static HTML page
+    # counts resources used by users and generates a static HTML page.
     #
     # "bob": {
     #  "configmaps":1,
     #  "secrets":2,
     # }
-    %[1]s apicount --tmpl path/to/html/template
+    %[1]s apicount -f path/to/apirequestcounts --tmpl path/to/html/template
 
-	# count users of a resource and generate a static HTML page
+	# counts users of a resource and generates a static HTML page.
     #
     # "secrets": {
     #   "bob":1,
     #   "alice":2,
     # }
-	%[1]s apicount --by resource --tmpl path/to/html/template
+	%[1]s apicount --by resource -f path/to/apirequestcounts --tmpl path/to/html/template
 `
 )
 
@@ -59,7 +59,7 @@ func NewCmdAPIRequestCount(parentName string, streams genericclioptions.IOStream
 	}
 
 	cmd.Flags().StringVar(&o.by, "by", o.by, "Specifies a filter to apply over the original data (eg. -by [user,resource])")
-	cmd.Flags().StringVarP(&o.inputDirectory, "datadir", "d", o.inputDirectory, "A directory which contains api requests data")
+	cmd.Flags().StringVarP(&o.inputDirectory, "datadir", "f", o.inputDirectory, "A directory which contains api requests data")
 	cmd.Flags().StringVarP(&o.outputDirectory, "outdir", "o", o.outputDirectory, "The path of the output directory")
 	cmd.Flags().StringVarP(&o.templateDirectory, "tmpl", "t", o.templateDirectory, "The path of the HTML template directory")
 
@@ -129,9 +129,9 @@ func (o *apiRequestCountOptions) Run() error {
 		return fmt.Errorf("failed while processing data, err = %v", err)
 	}
 
-	klog.Infof("creating a new HTML page at %s", o.outputDirectory)
+	klog.Infof("creating a new dashboard at %s", o.outputDirectory)
 	klog.Info("serializing data")
-	rawData, err := serializeDataWithWriteOrder(ret, sortByPrimaryKey(ret))
+	rawData, err := serializeDataWithWriteOrder(ret, primaryKeyOrder(ret), secondaryKeyOrder)
 	if err != nil {
 		return fmt.Errorf("failed to serialized data to a JSON file, err %v", err)
 	}
@@ -139,6 +139,6 @@ func (o *apiRequestCountOptions) Run() error {
 	if err := copyDir(o.templateDirectory, o.outputDirectory); err != nil {
 		return fmt.Errorf("failed to copy the directory tree from %q to %q, due to err = %v", o.templateDirectory, o.outputDirectory, err)
 	}
-	klog.Info("saving the HTML dashboard")
+	klog.Info("saving the dashboard")
 	return serializeToHTMLTemplate(rawData, filepath.Join(o.templateDirectory, "index.html"), path.Join(o.outputDirectory, "index.html"))
 }
