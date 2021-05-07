@@ -41,20 +41,21 @@ type AuditOptions struct {
 	builder    *resource.Builder
 	args       []string
 
-	verbs        []string
-	resources    []string
-	subresources []string
-	namespaces   []string
-	names        []string
-	users        []string
-	uids         []string
-	filenames    []string
-	failedOnly   bool
-	output       string
-	topBy        string
-	beforeString string
-	afterString  string
-	stages       []string
+	verbs           []string
+	resources       []string
+	subresources    []string
+	namespaces      []string
+	names           []string
+	users           []string
+	uids            []string
+	filenames       []string
+	failedOnly      bool
+	httpStatusCodes []int32
+	output          string
+	topBy           string
+	beforeString    string
+	afterString     string
+	stages          []string
 
 	genericclioptions.IOStreams
 }
@@ -99,11 +100,12 @@ func NewCmdAudit(parentName string, streams genericclioptions.IOStreams) *cobra.
 	cmd.Flags().StringSliceVar(&o.verbs, "verb", o.verbs, "Filter result of search to only contain the specified verb (eg. 'update', 'get', etc..)")
 	cmd.Flags().StringSliceVar(&o.resources, "resource", o.resources, "Filter result of search to only contain the specified resource.)")
 	cmd.Flags().StringSliceVar(&o.subresources, "subresource", o.subresources, "Filter result of search to only contain the specified subresources.  \"-*\" means no subresource)")
-	cmd.Flags().StringSliceVarP(&o.namespaces, "namespace", "n", o.namespaces, "Filter result of search to only contain the specified namespace.)")
+	cmd.Flags().StringSliceVarP(&o.namespaces, "namespace", "n", o.namespaces, "Filter result of search to only contain the specified namespace.")
 	cmd.Flags().StringSliceVar(&o.names, "name", o.names, "Filter result of search to only contain the specified name.)")
 	cmd.Flags().StringSliceVar(&o.users, "user", o.users, "Filter result of search to only contain the specified user.)")
 	cmd.Flags().StringVar(&o.topBy, "by", o.topBy, "Switch the top output format (eg. -o top -by [verb,user,resource,httpstatus,namespace]).")
 	cmd.Flags().BoolVar(&o.failedOnly, "failed-only", false, "Filter result of search to only contain http failures.)")
+	cmd.Flags().Int32SliceVar(&o.httpStatusCodes, "http-status-code", o.httpStatusCodes, "Filter result of search to only certain http status codes (200,429).")
 	cmd.Flags().StringVar(&o.beforeString, "before", o.beforeString, "Filter result of search to only before a timestamp.)")
 	cmd.Flags().StringVar(&o.afterString, "after", o.afterString, "Filter result of search to only after a timestamp.)")
 	cmd.Flags().StringSliceVarP(&o.stages, "stage", "s", o.stages, "Filter result by event stage (eg. 'RequestReceived', 'ResponseComplete'), if omitted all stages will be included)")
@@ -214,6 +216,9 @@ func (o *AuditOptions) Run() error {
 	}
 	if len(o.verbs) > 0 {
 		filters = append(filters, &FilterByVerbs{Verbs: sets.NewString(o.verbs...)})
+	}
+	if len(o.httpStatusCodes) > 0 {
+		filters = append(filters, &FilterByHTTPStatus{HTTPStatusCodes: sets.NewInt32(o.httpStatusCodes...)})
 	}
 	if o.failedOnly {
 		filters = append(filters, &FilterByFailures{})

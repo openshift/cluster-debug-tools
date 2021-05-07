@@ -47,6 +47,25 @@ func (f *FilterByFailures) FilterEvents(events ...*auditv1.Event) []*auditv1.Eve
 	return ret
 }
 
+type FilterByHTTPStatus struct {
+	HTTPStatusCodes sets.Int32
+}
+
+func (f *FilterByHTTPStatus) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
+	ret := []*auditv1.Event{}
+	for i := range events {
+		event := events[i]
+		if event.ResponseStatus == nil {
+			continue
+		}
+		if f.HTTPStatusCodes.Has(event.ResponseStatus.Code) {
+			ret = append(ret, event)
+		}
+	}
+
+	return ret
+}
+
 type FilterByNamespaces struct {
 	Namespaces sets.String
 }

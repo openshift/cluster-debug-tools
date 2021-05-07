@@ -26,8 +26,27 @@ import (
 )
 
 type eventWithCounter struct {
-	event *auditv1.Event
-	count int64
+	event             *auditv1.Event
+	count             int64
+	statusCodeToCount map[int32]int64
+	totalDuration     time.Duration
+}
+
+func newEventWithCounter(event *auditv1.Event) *eventWithCounter {
+	return &eventWithCounter{
+		event:             event,
+		count:             1,
+		statusCodeToCount: map[int32]int64{},
+		totalDuration:     event.StageTimestamp.Time.Sub(event.RequestReceivedTimestamp.Time),
+	}
+}
+
+func (e *eventWithCounter) addEvent(event *auditv1.Event) {
+	e.count++
+	e.totalDuration += event.StageTimestamp.Time.Sub(event.RequestReceivedTimestamp.Time)
+	if event.ResponseStatus != nil {
+		e.statusCodeToCount[event.ResponseStatus.Code] = e.statusCodeToCount[event.ResponseStatus.Code] + 1
+	}
 }
 
 func PrintAuditEvents(writer io.Writer, events []*auditv1.Event) {
@@ -59,15 +78,16 @@ func PrintAuditEventsWithCount(writer io.Writer, events []*eventWithCounter) {
 
 	//
 	for _, event := range events {
-		duration := event.event.StageTimestamp.Time.Sub(event.event.RequestReceivedTimestamp.Time)
-		code := int32(0)
-		if event.event.ResponseStatus != nil {
-			code = event.event.ResponseStatus.Code
+		averageDuration := time.Duration(int64(event.totalDuration) / event.count)
+		codeStrings := []string{}
+		for code, count := range event.statusCodeToCount {
+			codeStrings = append(codeStrings, fmt.Sprintf("%v-%v", code, count))
 		}
-		if _, err := fmt.Fprintf(w, "%8s [%12s] [%3d]\t %s\t [%s]\n",
+		sort.Strings(codeStrings)
+		if _, err := fmt.Fprintf(w, "%8s [%12s] [%v]\t %s\t [%s]\n",
 			fmt.Sprintf("%dx", event.count),
-			duration,
-			code,
+			averageDuration,
+			strings.Join(codeStrings, ","),
 			event.event.RequestURI,
 			event.event.User.Username); err != nil {
 			panic(err)
@@ -189,7 +209,7 @@ func PrintTopByResourceAuditEvents(writer io.Writer, numToDisplay int, events []
 	sort.Slice(sortedResult, func(i, j int) bool {
 		return sortedResult[i].count >= sortedResult[j].count
 	})
-	if len(sortedResult) > numToDisplay{
+	if len(sortedResult) > numToDisplay {
 		sortedResult = sortedResult[:numToDisplay]
 	}
 
@@ -215,13 +235,13 @@ func PrintTopByVerbAuditEvents(writer io.Writer, numToDisplay int, events []*aud
 			found := false
 			for i, countedEvent := range countedEvents {
 				if IsEquivalentAuditURI(countedEvent.event.RequestURI, event.RequestURI) && countedEvent.event.User.Username == event.User.Username {
-					countedEvents[i].count += 1
+					countedEvents[i].addEvent(event)
 					found = true
 					break
 				}
 			}
 			if !found {
-				countedEvents = append(countedEvents, &eventWithCounter{event: event, count: 1})
+				countedEvents = append(countedEvents, newEventWithCounter(event))
 			}
 		}
 
@@ -451,13 +471,13 @@ func PrintTopByHTTPStatusCodeAuditEvents(writer io.Writer, numToDisplay int, eve
 			found := false
 			for i, countedEvent := range countedEvents {
 				if IsEquivalentAuditURI(countedEvent.event.RequestURI, event.RequestURI) && countedEvent.event.User.Username == event.User.Username {
-					countedEvents[i].count += 1
+					countedEvents[i].addEvent(event)
 					found = true
 					break
 				}
 			}
 			if !found {
-				countedEvents = append(countedEvents, &eventWithCounter{event: event, count: 1})
+				countedEvents = append(countedEvents, newEventWithCounter(event))
 			}
 		}
 
