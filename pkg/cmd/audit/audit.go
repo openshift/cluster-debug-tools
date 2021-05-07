@@ -3,6 +3,7 @@ package audit
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -115,7 +116,52 @@ func (o *AuditOptions) Complete(command *cobra.Command, args []string) error {
 }
 
 func (o *AuditOptions) Validate() error {
+	switch {
+	case o.output == "":
+	case strings.HasPrefix(o.output, "top"):
+		_, err := topN(o.output)
+		if err != nil {
+			return err
+		}
+		if err := validateTopBy(o.topBy); err != nil {
+			return nil
+		}
+	case o.output == "wide":
+	case o.output == "json":
+	default:
+		return fmt.Errorf("unsupported output format: top=N, wide, json")
+	}
+
 	return nil
+}
+
+func validateTopBy(topBy string) error {
+	switch topBy {
+	case "verb":
+	case "user":
+	case "resource":
+	case "httpstatus":
+	case "namespace":
+	default:
+		return fmt.Errorf("unsupported -by value: [verb,user,resource,httpstatus,namespace]")
+	}
+	return nil
+}
+
+func topN(output string) (int, error) {
+	if output == "top" {
+		return 10, nil
+	}
+	if !strings.HasPrefix(output, "top=") {
+		return 10, fmt.Errorf("%q is not top=N", output)
+	}
+
+	nString := output[len("top="):]
+	n, err := strconv.ParseInt(nString, 10, 32)
+	if err != nil {
+		return 10, err
+	}
+	return int(n), nil
 }
 
 func (o *AuditOptions) Run() error {
@@ -178,28 +224,32 @@ func (o *AuditOptions) Run() error {
 		return err
 	}
 	events = filters.FilterEvents(events...)
-	switch o.output {
-	case "":
+	switch {
+	case o.output == "":
 		PrintAuditEvents(o.Out, events)
-	case "top":
+	case strings.HasPrefix(o.output, "top"):
+		numToDisplay, err := topN(o.output)
+		if err != nil {
+			return err
+		}
 		PrintSummary(o.Out, events)
 		switch o.topBy {
 		case "verb":
-			PrintTopByVerbAuditEvents(o.Out, events)
+			PrintTopByVerbAuditEvents(o.Out, numToDisplay, events)
 		case "user":
-			PrintTopByUserAuditEvents(o.Out, events)
+			PrintTopByUserAuditEvents(o.Out, numToDisplay, events)
 		case "resource":
-			PrintTopByResourceAuditEvents(o.Out, events)
+			PrintTopByResourceAuditEvents(o.Out, numToDisplay, events)
 		case "httpstatus":
-			PrintTopByHTTPStatusCodeAuditEvents(o.Out, events)
+			PrintTopByHTTPStatusCodeAuditEvents(o.Out, numToDisplay, events)
 		case "namespace":
-			PrintTopByNamespace(o.Out, events)
+			PrintTopByNamespace(o.Out, numToDisplay, events)
 		default:
 			return fmt.Errorf("unsupported -by value")
 		}
-	case "wide":
+	case o.output == "wide":
 		PrintAuditEventsWide(o.Out, events)
-	case "json":
+	case o.output == "json":
 		encoder := json.NewEncoder(o.Out)
 		for _, event := range events {
 			if err := encoder.Encode(event); err != nil {
