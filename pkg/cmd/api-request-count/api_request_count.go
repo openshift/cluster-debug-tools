@@ -58,10 +58,11 @@ func NewCmdAPIRequestCount(parentName string, streams genericclioptions.IOStream
 		},
 	}
 
-	cmd.Flags().StringVar(&o.by, "by", o.by, "Specifies a filter to apply over the original data (eg. -by [user,resource])")
 	cmd.Flags().StringVarP(&o.inputDirectory, "datadir", "f", o.inputDirectory, "A directory which contains api requests data")
 	cmd.Flags().StringVarP(&o.outputDirectory, "outdir", "o", o.outputDirectory, "The path of the output directory")
 	cmd.Flags().StringVarP(&o.templateDirectory, "tmpl", "t", o.templateDirectory, "The path of the HTML template directory")
+	cmd.Flags().StringVar(&o.by, "by", o.by, "Specifies a aggregateFn to apply over the original data (eg. -by [user,resource])")
+	cmd.Flags().StringSliceVar(&o.verbs, "verb", o.verbs, "Filter result of search to only contain the specified verb (eg. 'update', 'get', etc..)")
 
 	return cmd
 }
@@ -70,7 +71,9 @@ type apiRequestCountOptions struct {
 	inputDirectory    string
 	outputDirectory   string
 	templateDirectory string
-	by                string
+
+	by    string
+	verbs []string
 
 	cwd string
 }
@@ -110,20 +113,26 @@ func (o *apiRequestCountOptions) Validate() error {
 }
 
 func (o *apiRequestCountOptions) Run() error {
-	ret := map[string]map[string]int64{}
-	var applyFilter filter
+	res := map[string]map[string]int64{}
+	var groupBy aggregateFn
 
 	switch o.by {
 	case "resource":
-		applyFilter = byResource
+		groupBy = groupByResource
 	case "user":
-		applyFilter = byUser
+		groupBy = groupByUser
+	}
+
+	var filters apiRequestFilters
+	if len(o.verbs) > 0 {
+		filters = append(filters, filterByVerbs(o.verbs))
 	}
 
 	klog.Infof("starting processing data from %s", o.inputDirectory)
-	if err := walkData(o.inputDirectory, func(counter *apiv1.APIRequestCount) error {
-		resourceRequests := getRequestHistoryForTheLast(0, 0, true, counter.Status)
-		mergeMaps(ret, applyFilter(counter.Name, resourceRequests))
+	if err := walkData(o.inputDirectory, func(unprocessedAPIRequests *apiv1.APIRequestCount) error {
+		apiRequests := getRequestHistoryForTheLast(0, 0, true, unprocessedAPIRequests.Status)
+		apiRequests = filters.apply(apiRequests)
+		mergeMaps(res, groupBy(unprocessedAPIRequests.Name, apiRequests))
 		return nil
 	}); err != nil {
 		return fmt.Errorf("failed while processing data, err = %v", err)
@@ -131,7 +140,7 @@ func (o *apiRequestCountOptions) Run() error {
 
 	klog.Infof("creating a new dashboard at %s", o.outputDirectory)
 	klog.Info("serializing data")
-	rawData, err := serializeDataWithWriteOrder(ret, primaryKeyOrder(ret), secondaryKeyOrder)
+	rawData, err := serializeDataWithWriteOrder(res, primaryKeyOrder(res), secondaryKeyOrder)
 	if err != nil {
 		return fmt.Errorf("failed to serialized data to a JSON file, err %v", err)
 	}
