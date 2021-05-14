@@ -56,6 +56,7 @@ type AuditOptions struct {
 	beforeString    string
 	afterString     string
 	stages          []string
+	duration        string
 
 	genericclioptions.IOStreams
 }
@@ -109,6 +110,7 @@ func NewCmdAudit(parentName string, streams genericclioptions.IOStreams) *cobra.
 	cmd.Flags().StringVar(&o.beforeString, "before", o.beforeString, "Filter result of search to only before a timestamp.)")
 	cmd.Flags().StringVar(&o.afterString, "after", o.afterString, "Filter result of search to only after a timestamp.)")
 	cmd.Flags().StringSliceVarP(&o.stages, "stage", "s", o.stages, "Filter result by event stage (eg. 'RequestReceived', 'ResponseComplete'), if omitted all stages will be included)")
+	cmd.Flags().StringVar(&o.duration, "duration", o.duration, "Filter all requests that didn't take longer than the specified timeout to complete. Keep in mind that requests usually don't take exactly the specified time. Adding a second or two should give you what you want.")
 
 	return cmd
 }
@@ -132,6 +134,12 @@ func (o *AuditOptions) Validate() error {
 	case o.output == "json":
 	default:
 		return fmt.Errorf("unsupported output format: top=N, wide, json")
+	}
+
+	if len(o.duration) > 0 {
+		if _, err := time.ParseDuration(o.duration); err != nil {
+			return fmt.Errorf("incorrect duration specified, err %v", err)
+		}
 	}
 
 	return nil
@@ -222,6 +230,13 @@ func (o *AuditOptions) Run() error {
 	}
 	if o.failedOnly {
 		filters = append(filters, &FilterByFailures{})
+	}
+	if len(o.duration) > 0 {
+		d, err := time.ParseDuration(o.duration)
+		if err != nil {
+			return err
+		}
+		filters = append(filters, &FilterByDuration{d})
 	}
 
 	events, err := GetEvents(o.filenames...)

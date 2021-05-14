@@ -406,3 +406,19 @@ func (f *FilterByBefore) FilterEvents(events ...*auditv1.Event) []*auditv1.Event
 
 	return ret
 }
+
+type FilterByDuration struct {
+	Duration time.Duration
+}
+
+func (f *FilterByDuration) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
+	ret := []*auditv1.Event{}
+	for i := range events {
+		event := events[i]
+		if event.StageTimestamp.Sub(event.RequestReceivedTimestamp.Time) <= f.Duration {
+			ret = append(ret, event)
+		}
+	}
+
+	return ret
+}
