@@ -1,18 +1,15 @@
 package main
 
 import (
+	"github.com/openshift/cluster-debug-tools/pkg/cmd/certs"
 	"os"
 
+	mustgather "github.com/openshift/cluster-debug-tools/pkg/cmd"
 	analyze_e2e "github.com/openshift/cluster-debug-tools/pkg/cmd/analyze-e2e"
-	apirequestcount "github.com/openshift/cluster-debug-tools/pkg/cmd/api-request-count"
 	"github.com/openshift/cluster-debug-tools/pkg/cmd/audit"
-	"github.com/openshift/cluster-debug-tools/pkg/cmd/certinspection"
 	"github.com/openshift/cluster-debug-tools/pkg/cmd/events"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-
-	mustgather "github.com/openshift/cluster-debug-tools/pkg/cmd"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 )
 
@@ -54,9 +51,8 @@ func NewCmdDevHelpers(streams genericclioptions.IOStreams) *cobra.Command {
 	cmd.AddCommand(events.NewCmdEvent("openshift-dev-helpers", streams))
 	cmd.AddCommand(audit.NewCmdAudit("openshift-dev-helpers", streams))
 	cmd.AddCommand(mustgather.NewCmdRevisionStatus("openshift-dev-helpers", streams))
-	cmd.AddCommand(certinspection.NewCmdCertInspection(streams))
+	cmd.AddCommand(certs.NewCmdCerts(streams))
 	cmd.AddCommand(analyze_e2e.NewCmdAnalyze("openshift-dev-helpers", streams))
-	cmd.AddCommand(apirequestcount.NewCmdAPIRequestCount("openshift-dev-helpers", streams))
 
 	return cmd
 }
