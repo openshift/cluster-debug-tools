@@ -3,6 +3,7 @@ package audit
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -34,6 +35,8 @@ var (
 	# filter event by stages
 	%[1]s audit -f audit.log --verb=get --stage=ResponseComplete --output=top --by=verb
 `
+
+	defaultLogFileRegex = regexp.MustCompile(`.*audit.*.log(.gz)?`)
 )
 
 type AuditOptions struct {
@@ -57,6 +60,9 @@ type AuditOptions struct {
 	afterString     string
 	stages          []string
 	duration        string
+	artifactDir     string
+	artifactRegStr  string
+	artifactReg     *regexp.Regexp
 
 	genericclioptions.IOStreams
 }
@@ -111,6 +117,8 @@ func NewCmdAudit(parentName string, streams genericclioptions.IOStreams) *cobra.
 	cmd.Flags().StringVar(&o.afterString, "after", o.afterString, "Filter result of search to only after a timestamp.)")
 	cmd.Flags().StringSliceVarP(&o.stages, "stage", "s", o.stages, "Filter result by event stage (eg. 'RequestReceived', 'ResponseComplete'), if omitted all stages will be included)")
 	cmd.Flags().StringVar(&o.duration, "duration", o.duration, "Filter all requests that didn't take longer than the specified timeout to complete. Keep in mind that requests usually don't take exactly the specified time. Adding a second or two should give you what you want.")
+	cmd.Flags().StringVar(&o.artifactDir, "artifact-dir", o.artifactDir, "Directory to traverse for artifact regex filter")
+	cmd.Flags().StringVar(&o.artifactRegStr, "artifact-regex", o.artifactRegStr, "Regex to use to filter log files in artifact directory")
 
 	return cmd
 }
@@ -140,6 +148,18 @@ func (o *AuditOptions) Validate() error {
 		if _, err := time.ParseDuration(o.duration); err != nil {
 			return fmt.Errorf("incorrect duration specified, err %v", err)
 		}
+	}
+
+	if o.artifactRegStr != "" && o.artifactDir == "" {
+		return fmt.Errorf("must supply --artifact-dir when using --artifact-regex")
+	}
+
+	if reg, err := regexp.Compile(o.artifactRegStr); err != nil {
+		return err
+	} else if reg.String() == "" {
+		o.artifactReg = defaultLogFileRegex
+	} else {
+		o.artifactReg = reg
 	}
 
 	return nil
@@ -175,6 +195,14 @@ func topN(output string) (int, error) {
 }
 
 func (o *AuditOptions) Run() error {
+	if len(o.artifactDir) > 0 {
+		filteredFiles, err := util.ListFilesInDir(o.artifactDir, util.RegexFilter(o.artifactReg))
+		if err != nil {
+			return err
+		}
+		o.filenames = append(o.filenames, filteredFiles...)
+	}
+
 	filters := AuditFilters{}
 	if len(o.uids) > 0 {
 		filters = append(filters, &FilterByUIDs{UIDs: sets.NewString(o.uids...)})
