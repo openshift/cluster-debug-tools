@@ -280,38 +280,63 @@ func GetEvents(auditFilenames ...string) ([]*auditv1.Event, error) {
 }
 
 func getEventFromManyFiles(auditFilenames ...string) ([]*auditv1.Event, int, error) {
+	wg := sync.WaitGroup{}
+	mu := sync.Mutex{}
+	wg.Add(len(auditFilenames))
+
+	errors := []error{}
 	ret := []*auditv1.Event{}
 	failures := 0
 	for _, auditFilename := range auditFilenames {
-		stat, err := os.Stat(auditFilename)
-		if err != nil {
-			return nil, 0, err
-		}
-		if !stat.IsDir() {
-			var localEvents []*auditv1.Event
-			var localFailures int
-			var localErr error
-			if strings.HasSuffix(auditFilename, ".gz") {
-				localEvents, localFailures, localErr = getEventsFromZip(auditFilename)
-			} else {
-				localEvents, localFailures, localErr = getEventsFromFile(auditFilename)
+		go func(filename string, mu *sync.Mutex, wg *sync.WaitGroup) {
+			defer wg.Done()
+
+			stat, err := os.Stat(filename)
+			if err != nil {
+				mu.Lock()
+				defer mu.Unlock()
+				errors = append(errors, err)
+				return
 			}
-			if localErr != nil {
-				return nil, 0, localErr
+			if !stat.IsDir() {
+				var localEvents []*auditv1.Event
+				var localFailures int
+				var localErr error
+				if strings.HasSuffix(filename, ".gz") {
+					localEvents, localFailures, localErr = getEventsFromZip(filename)
+				} else {
+					localEvents, localFailures, localErr = getEventsFromFile(filename)
+				}
+				if localErr != nil {
+					mu.Lock()
+					defer mu.Unlock()
+					errors = append(errors, localErr)
+					return
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				failures += localFailures
+				ret = append(ret, localEvents...)
+				return
 			}
+
+			localEvents, localFailures, localErr := getEventsFromDirectory(filename)
+			if err != nil {
+				mu.Lock()
+				defer mu.Unlock()
+				errors = append(errors, localErr)
+				return
+			}
+			mu.Lock()
+			defer mu.Unlock()
 			failures += localFailures
 			ret = append(ret, localEvents...)
-			continue
-		}
-
-		localEvents, localFailures, localErr := getEventsFromDirectory(auditFilename)
-		if err != nil {
-			return nil, 0, localErr
-		}
-		failures += localFailures
-		ret = append(ret, localEvents...)
+		}(auditFilename, &mu, &wg)
 	}
-
+	wg.Wait()
+	if len(errors) > 0 {
+		return nil, 0, fmt.Errorf("errors reading audit files, %v", errors)
+	}
 	return ret, failures, nil
 }
 
