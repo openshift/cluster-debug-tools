@@ -1,8 +1,10 @@
 package main
 
 import (
-	"github.com/openshift/cluster-debug-tools/pkg/cmd/certs"
 	"os"
+
+	"github.com/openshift/cluster-debug-tools/pkg/cmd/certs"
+	"github.com/openshift/cluster-debug-tools/pkg/cmd/download"
 
 	mustgather "github.com/openshift/cluster-debug-tools/pkg/cmd"
 	analyze_e2e "github.com/openshift/cluster-debug-tools/pkg/cmd/analyze-e2e"
@@ -53,6 +55,7 @@ func NewCmdDevHelpers(streams genericclioptions.IOStreams) *cobra.Command {
 	cmd.AddCommand(mustgather.NewCmdRevisionStatus("openshift-dev-helpers", streams))
 	cmd.AddCommand(certs.NewCmdCerts(streams))
 	cmd.AddCommand(analyze_e2e.NewCmdAnalyze("openshift-dev-helpers", streams))
+	cmd.AddCommand(download.NewDownloadCommand("openshift-dev-helpers", streams))
 
 	return cmd
 }
