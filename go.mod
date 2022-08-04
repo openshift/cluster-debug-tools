@@ -3,6 +3,7 @@ module github.com/openshift/cluster-debug-tools
 go 1.16
 
 require (
+	cloud.google.com/go/storage v1.6.0
 	github.com/ghodss/yaml v1.0.0
 	github.com/gonum/blas v0.0.0-20181208220705-f22b278b28ac // indirect
 	github.com/gonum/floats v0.0.0-20181209220543-c233463c7e82 // indirect
@@ -17,6 +18,8 @@ require (
 	github.com/openshift/build-machinery-go v0.0.0-20210209125900-0da259a2c359
 	github.com/spf13/cobra v1.1.1
 	github.com/spf13/pflag v1.0.5
+	github.com/stretchr/testify v1.7.1 // indirect
+	google.golang.org/api v0.20.0
 	k8s.io/api v0.21.0-rc.0
 	k8s.io/apimachinery v0.21.0-rc.0
 	k8s.io/apiserver v0.21.0-rc.0
