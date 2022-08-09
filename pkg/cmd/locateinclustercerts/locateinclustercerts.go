@@ -103,8 +103,18 @@ func NewCmdLocateInClusterCerts(streams genericclioptions.IOStreams) *cobra.Comm
 	o.builderFlags.AddFlags(cmd.Flags())
 	o.configFlags.AddFlags(cmd.Flags())
 
-	cmd.Flags().StringVarP(&o.outputMode, "output", "o", o.outputMode, "Choose your output format")
-	cmd.Flags().StringVar(&o.additionalInputDir, "additional-input-dir", o.additionalInputDir, "Additional directory of certs.")
+	cmd.Flags().StringVarP(
+		&o.outputMode,
+		"output", "o",
+		o.outputMode,
+		"Choose your output format",
+	)
+	cmd.Flags().StringVar(
+		&o.additionalInputDir,
+		"additional-input-dir",
+		o.additionalInputDir,
+		"Additional directory of certs.",
+	)
 
 	return cmd
 }
@@ -231,9 +241,9 @@ func (o *LocateInClusterCertsOptions) GatherCerts() (*certgraphapi.PKIList, erro
 
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
+	// if err != nil {
+	// return nil, err
+	// }
 
 	filesystemCerts, err := o.GatherCertsFromFilesystem()
 	if err != nil {
