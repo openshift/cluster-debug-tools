@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/openshift/cluster-debug-tools/pkg/cmd/locateinclustercerts/certgraphapi"
@@ -27,7 +28,12 @@ func (o *LocateInClusterCertsOptions) GatherCertsFromFilesystem() (*certgraphapi
 			if info.Size() == 0 {
 				return nil
 			}
-			if strings.HasSuffix(path, "/ca-bundle.crt") {
+			// matches ca-bundle.crt, ca.crt, kubelet-ca.crt and service-ca.crt
+			ok, err := regexp.MatchString(`^.*ca(-bundle)?\.crt$`, path)
+			if err != nil {
+				return err
+			}
+			if ok {
 				data, err := inspectCAFile(path, info)
 				if err != nil {
 					return err
