@@ -136,7 +136,7 @@ func (o *AuditOptions) Validate() error {
 			return err
 		}
 		if err := validateTopBy(o.topBy); err != nil {
-			return nil
+			return err
 		}
 	case o.output == "wide":
 	case o.output == "json":
