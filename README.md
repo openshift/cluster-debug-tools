@@ -13,6 +13,7 @@ cluster-debug-tools
 * `event-filter`    filters the event logs captured during CI test run on a webpage (based on jqgrid).
 * `inspect-certs`   inspects the certs, keys, and ca-bundles in a set of resources.
 * `revision-status` counts failed installer pods and current revision of static pods.
+* `download`        downloads artifacts from a Prow CI or GCS Link for a specified regex or all contents.
 
 ### Building and Installing
 
