@@ -324,3 +324,44 @@ type FilterByDuration struct {
 func (f *FilterByDuration) Matches(event *auditv1.Event) bool {
 	return event.StageTimestamp.Sub(event.RequestReceivedTimestamp.Time) <= f.Duration
 }
+
+type FilterByAnnotationPresence struct {
+	AnnotationKey string
+}
+
+func (f *FilterByAnnotationPresence) Matches(event *auditv1.Event) bool {
+	_, ok := event.Annotations[f.AnnotationKey]
+	return ok
+}
+
+const (
+	PodSecurityViolationsAll = "all"
+	PodSecurityViolationsPod = "pod"
+)
+
+func NewFilterByPodSecurityViolations(filterType string) EventFilterPredicate {
+	filters := []EventFilterPredicate{}
+	if filterType == PodSecurityViolationsPod {
+		filters = append(filters,
+			&FilterByResources{
+				Resources: map[schema.GroupResource]bool{
+					{Resource: "pods"}: true,
+				},
+			})
+	}
+	filters = append(filters, &FilterByAnnotationPresence{AnnotationKey: "pod-security.kubernetes.io/audit-violations"})
+	return &FilterUnion{filters: filters}
+}
+
+type FilterUnion struct {
+	filters []EventFilterPredicate
+}
+
+func (f *FilterUnion) Matches(event *auditv1.Event) bool {
+	for _, filter := range f.filters {
+		if !filter.Matches(event) {
+			return false
+		}
+	}
+	return true
+}

@@ -41,22 +41,23 @@ type AuditOptions struct {
 	builder    *resource.Builder
 	args       []string
 
-	verbs           []string
-	resources       []string
-	subresources    []string
-	namespaces      []string
-	names           []string
-	users           []string
-	uids            []string
-	filenames       []string
-	failedOnly      bool
-	httpStatusCodes []int32
-	output          string
-	topBy           string
-	beforeString    string
-	afterString     string
-	stages          []string
-	duration        string
+	verbs             []string
+	resources         []string
+	subresources      []string
+	namespaces        []string
+	names             []string
+	users             []string
+	uids              []string
+	filenames         []string
+	failedOnly        bool
+	httpStatusCodes   []int32
+	output            string
+	topBy             string
+	beforeString      string
+	afterString       string
+	stages            []string
+	duration          string
+	podsecurityfilter string
 
 	genericclioptions.IOStreams
 }
@@ -111,6 +112,7 @@ func NewCmdAudit(parentName string, streams genericclioptions.IOStreams) *cobra.
 	cmd.Flags().StringVar(&o.afterString, "after", o.afterString, "Filter result of search to only after a timestamp.)")
 	cmd.Flags().StringSliceVarP(&o.stages, "stage", "s", o.stages, "Filter result by event stage (eg. 'RequestReceived', 'ResponseComplete'), if omitted all stages will be included)")
 	cmd.Flags().StringVar(&o.duration, "duration", o.duration, "Filter all requests that didn't take longer than the specified timeout to complete. Keep in mind that requests usually don't take exactly the specified time. Adding a second or two should give you what you want.")
+	cmd.Flags().StringVar(&o.podsecurityfilter, "podsecurityviolations", "", "Filter pod security admission violations. Possible values: 'pod', 'all'; for either pod violations only, or violations of both pods and pod controllers")
 
 	return cmd
 }
@@ -128,7 +130,10 @@ func (o *AuditOptions) Validate() error {
 			return err
 		}
 		if err := validateTopBy(o.topBy); err != nil {
-			return nil
+			return err
+		}
+		if err := validatePodSecurityFilter(o.podsecurityfilter); err != nil {
+			return err
 		}
 	case o.output == "wide":
 	case o.output == "json":
@@ -172,6 +177,17 @@ func topN(output string) (int, error) {
 		return 10, err
 	}
 	return int(n), nil
+}
+
+func validatePodSecurityFilter(podsecurityfilter string) error {
+	switch podsecurityfilter {
+	case "":
+	case PodSecurityViolationsAll:
+	case PodSecurityViolationsPod:
+	default:
+		return fmt.Errorf("unsupported -podsecurityviolations value: %q; available values are: [pod,all]", podsecurityfilter)
+	}
+	return nil
 }
 
 func (o *AuditOptions) Run() error {
@@ -237,6 +253,10 @@ func (o *AuditOptions) Run() error {
 			return err
 		}
 		filters = append(filters, &FilterByDuration{d})
+	}
+
+	if psaFilterType := o.podsecurityfilter; len(psaFilterType) > 0 {
+		filters = append(filters, NewFilterByPodSecurityViolations(psaFilterType))
 	}
 
 	events, err := GetEvents(o.filenames...)
