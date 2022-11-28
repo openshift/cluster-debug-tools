@@ -12,232 +12,169 @@ import (
 	auditv1 "k8s.io/apiserver/pkg/apis/audit/v1"
 )
 
-type AuditFilter interface {
-	FilterEvents(events ...*auditv1.Event) []*auditv1.Event
+type EventFilterPredicate interface {
+	Matches(*auditv1.Event) bool
 }
 
-type AuditFilters []AuditFilter
+type AuditFilters []EventFilterPredicate
 
 func (f AuditFilters) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
-	ret := make([]*auditv1.Event, len(events), len(events))
+	ret := make([]*auditv1.Event, len(events))
 	copy(ret, events)
 
 	for _, filter := range f {
-		ret = filter.FilterEvents(ret...)
+		ret = filterEvents(filter, ret...)
 	}
 
+	return ret
+}
+
+func filterEvents(predicate EventFilterPredicate, events ...*auditv1.Event) []*auditv1.Event {
+	ret := []*auditv1.Event{}
+	for i := range events {
+		event := events[i]
+		if predicate.Matches(event) {
+			ret = append(ret, event)
+		}
+	}
 	return ret
 }
 
 type FilterByFailures struct {
 }
 
-func (f *FilterByFailures) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
-	ret := []*auditv1.Event{}
-	for i := range events {
-		event := events[i]
-		if event.ResponseStatus == nil {
-			continue
-		}
-		if event.ResponseStatus.Code > 299 {
-			ret = append(ret, event)
-		}
+func (f *FilterByFailures) Matches(event *auditv1.Event) bool {
+	if event.ResponseStatus == nil {
+		return false
 	}
 
-	return ret
+	return event.ResponseStatus.Code > 299
 }
 
 type FilterByHTTPStatus struct {
 	HTTPStatusCodes sets.Int32
 }
 
-func (f *FilterByHTTPStatus) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
-	ret := []*auditv1.Event{}
-	for i := range events {
-		event := events[i]
-		if event.ResponseStatus == nil {
-			continue
-		}
-		if f.HTTPStatusCodes.Has(event.ResponseStatus.Code) {
-			ret = append(ret, event)
-		}
+func (f *FilterByHTTPStatus) Matches(event *auditv1.Event) bool {
+	if event.ResponseStatus == nil {
+		return false
 	}
 
-	return ret
+	if f.HTTPStatusCodes.Has(event.ResponseStatus.Code) {
+		return true
+	}
+	return false
 }
 
 type FilterByNamespaces struct {
 	Namespaces sets.String
 }
 
-func (f *FilterByNamespaces) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
-	ret := []*auditv1.Event{}
-	for i := range events {
-		event := events[i]
-		ns, _, _, _ := URIToParts(event.RequestURI)
+func (f *FilterByNamespaces) Matches(event *auditv1.Event) bool {
+	ns, _, _, _ := URIToParts(event.RequestURI)
 
-		if util.AcceptString(f.Namespaces, ns) {
-			ret = append(ret, event)
-		}
-	}
+	return util.AcceptString(f.Namespaces, ns)
 
-	return ret
 }
 
 type FilterBySubresources struct {
 	Subresources sets.String
 }
 
-func (f *FilterBySubresources) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
-	ret := []*auditv1.Event{}
-	for i := range events {
-		event := events[i]
-		_, _, _, subresource := URIToParts(event.RequestURI)
+func (f *FilterBySubresources) Matches(event *auditv1.Event) bool {
+	_, _, _, subresource := URIToParts(event.RequestURI)
 
-		if f.Subresources.Has("-*") && len(f.Subresources) == 1 && len(subresource) == 0 {
-			ret = append(ret, event)
-			continue
-		}
-		if util.AcceptString(f.Subresources, subresource) {
-			ret = append(ret, event)
-		}
+	if f.Subresources.Has("-*") && len(f.Subresources) == 1 && len(subresource) == 0 {
+		return true
 	}
 
-	return ret
+	return util.AcceptString(f.Subresources, subresource)
 }
 
 type FilterByNames struct {
 	Names sets.String
 }
 
-func (f *FilterByNames) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
-	ret := []*auditv1.Event{}
-	for i := range events {
-		event := events[i]
-		_, _, name, _ := URIToParts(event.RequestURI)
+func (f *FilterByNames) Matches(event *auditv1.Event) bool {
+	_, _, name, _ := URIToParts(event.RequestURI)
 
-		if util.AcceptString(f.Names, name) {
-			ret = append(ret, event)
-			continue
-		}
-
-		// if we didn't match, check the objectref
-		if event.ObjectRef == nil {
-			continue
-		}
-
-		if util.AcceptString(f.Names, event.ObjectRef.Name) {
-			ret = append(ret, event)
-		}
+	if util.AcceptString(f.Names, name) {
+		return true
 	}
 
-	return ret
+	// if we didn't match, check the objectref
+	if event.ObjectRef == nil {
+		return false
+	}
+
+	return util.AcceptString(f.Names, event.ObjectRef.Name)
 }
 
 type FilterByUIDs struct {
 	UIDs sets.String
 }
 
-func (f *FilterByUIDs) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
-	ret := []*auditv1.Event{}
-	for i := range events {
-		event := events[i]
+func (f *FilterByUIDs) Matches(event *auditv1.Event) bool {
+	return util.AcceptString(f.UIDs, string(event.AuditID))
 
-		if util.AcceptString(f.UIDs, string(event.AuditID)) {
-			ret = append(ret, event)
-		}
-	}
-
-	return ret
 }
 
 type FilterByUser struct {
 	Users sets.String
 }
 
-func (f *FilterByUser) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
-	ret := []*auditv1.Event{}
-	for i := range events {
-		event := events[i]
-
-		if util.AcceptString(f.Users, event.User.Username) {
-			ret = append(ret, event)
-		}
-	}
-
-	return ret
+func (f *FilterByUser) Matches(event *auditv1.Event) bool {
+	return util.AcceptString(f.Users, event.User.Username)
 }
 
 type FilterByVerbs struct {
 	Verbs sets.String
 }
 
-func (f *FilterByVerbs) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
-	ret := []*auditv1.Event{}
-	for i := range events {
-		event := events[i]
-
-		if util.AcceptString(f.Verbs, event.Verb) {
-			ret = append(ret, event)
-		}
-	}
-
-	return ret
+func (f *FilterByVerbs) Matches(event *auditv1.Event) bool {
+	return util.AcceptString(f.Verbs, event.Verb)
 }
 
 type FilterByResources struct {
 	Resources map[schema.GroupResource]bool
 }
 
-func (f *FilterByResources) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
-	ret := []*auditv1.Event{}
-	for i := range events {
-		event := events[i]
-		_, gvr, _, _ := URIToParts(event.RequestURI)
-		antiMatch := schema.GroupResource{Resource: "-" + gvr.Resource, Group: gvr.Group}
+func (f *FilterByResources) Matches(event *auditv1.Event) bool {
+	_, gvr, _, _ := URIToParts(event.RequestURI)
+	antiMatch := schema.GroupResource{Resource: "-" + gvr.Resource, Group: gvr.Group}
 
-		// check for an anti-match
-		if f.Resources[antiMatch] {
-			continue
-		}
-		if f.Resources[gvr.GroupResource()] {
-			ret = append(ret, event)
-		}
+	// check for an anti-match
+	if f.Resources[antiMatch] {
+		return false
+	}
+	if f.Resources[gvr.GroupResource()] {
+		return true
+	}
 
-		// if we aren't an exact match, match on resource only if group is '*'
-		// check for an anti-match
-		antiMatched := false
-		for currResource := range f.Resources {
-			if currResource.Group == "*" && currResource.Resource == antiMatch.Resource {
-				antiMatched = true
-				break
-			}
-			if currResource.Resource == "-*" && currResource.Group == gvr.Group {
-				antiMatched = true
-				break
-			}
+	// if we aren't an exact match, match on resource only if group is '*'
+	// check for an anti-match
+	for currResource := range f.Resources {
+		if currResource.Group == "*" && currResource.Resource == antiMatch.Resource {
+			return false
 		}
-		if antiMatched {
-			continue
-		}
-
-		for currResource := range f.Resources {
-			if currResource.Group == "*" && currResource.Resource == "*" {
-				ret = append(ret, event)
-				break
-			}
-			if currResource.Group == "*" && currResource.Resource == gvr.Resource {
-				ret = append(ret, event)
-				break
-			}
-			if currResource.Resource == "*" && currResource.Group == gvr.Group {
-				ret = append(ret, event)
-				break
-			}
+		if currResource.Resource == "-*" && currResource.Group == gvr.Group {
+			return false
 		}
 	}
 
-	return ret
+	for currResource := range f.Resources {
+		if currResource.Group == "*" && currResource.Resource == "*" {
+			return true
+		}
+		if currResource.Group == "*" && currResource.Resource == gvr.Resource {
+			return true
+		}
+		if currResource.Resource == "*" && currResource.Group == gvr.Group {
+			return true
+		}
+	}
+
+	return false
 }
 
 func URIToParts(uri string) (string, schema.GroupVersionResource, string, string) {
@@ -355,70 +292,35 @@ type FilterByStage struct {
 	Stages sets.String
 }
 
-func (f *FilterByStage) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
-	// in case we end up calling the filter with an empty set of stage then we have nothing to filter.
-	if len(f.Stages) == 0 {
-		return events
-	}
-
-	ret := []*auditv1.Event{}
-	for i := range events {
-		event := events[i]
-
-		// TODO: an event not having a stage, what do we do?
-		if f.Stages.Has(string(event.Stage)) {
-			ret = append(ret, event)
-		}
-	}
-
-	return ret
+func (f *FilterByStage) Matches(event *auditv1.Event) bool {
+	// TODO: an event not having a stage, what do we do?
+	return f.Stages.Has(string(event.Stage))
 }
 
 type FilterByAfter struct {
 	After time.Time
 }
 
-func (f *FilterByAfter) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
-	ret := []*auditv1.Event{}
-	for i := range events {
-		event := events[i]
-		if event.RequestReceivedTimestamp.After(f.After) {
-			ret = append(ret, event)
-		}
-	}
-
-	return ret
+func (f *FilterByAfter) Matches(event *auditv1.Event) bool {
+	return event.RequestReceivedTimestamp.After(f.After)
 }
 
 type FilterByBefore struct {
-	Before time.Time
+	Before    time.Time
+	microtime metav1.MicroTime
 }
 
-func (f *FilterByBefore) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
-	t := metav1.NewMicroTime(f.Before)
-	ret := []*auditv1.Event{}
-	for i := range events {
-		event := events[i]
-		if event.RequestReceivedTimestamp.Before(&t) {
-			ret = append(ret, event)
-		}
+func (f *FilterByBefore) Matches(event *auditv1.Event) bool {
+	if f.microtime.IsZero() {
+		f.microtime = metav1.NewMicroTime(f.Before)
 	}
-
-	return ret
+	return event.RequestReceivedTimestamp.Before(&f.microtime)
 }
 
 type FilterByDuration struct {
 	Duration time.Duration
 }
 
-func (f *FilterByDuration) FilterEvents(events ...*auditv1.Event) []*auditv1.Event {
-	ret := []*auditv1.Event{}
-	for i := range events {
-		event := events[i]
-		if event.StageTimestamp.Sub(event.RequestReceivedTimestamp.Time) <= f.Duration {
-			ret = append(ret, event)
-		}
-	}
-
-	return ret
+func (f *FilterByDuration) Matches(event *auditv1.Event) bool {
+	return event.StageTimestamp.Sub(event.RequestReceivedTimestamp.Time) <= f.Duration
 }
