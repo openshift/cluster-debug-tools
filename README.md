@@ -17,11 +17,29 @@ cluster-debug-tools
 
 ### Building and Installing
 
-To make this plugin available in `oc` or `kubectl`, just run: `go get github.com/openshift/cluster-debug-tools/cmd/kubectl-dev_tool`
+To make this plugin available in `oc` or `kubectl`,
 
-Alternatively, you can build and install it manually:
++ If you have docker/podman installed, no need to clone, just run:
 
-```go
+```bash
+ cd /tmp ; docker build -t go-debug-oc -f Dockerfile && \
+ docker run --rm -v .:/app go-debug-oc && \
+ sudo cp -ai cluster-debug-tools/kubectl-dev_tool /usr/local/bin/
+ ```
+
+then you can delete the image and the cloned repo if needed:
+  ```bash
+  docker rmi go-debug-oc;
+  rm -rf cluster-debug-tools
+  ```
+
++ If you happen to have golang, make, gcc, git and build-essentials/kernel-devel installed, just run:
+
+`go get github.com/openshift/cluster-debug-tools/cmd/kubectl-dev_tool`
+
++ Alternatively, you can build and install it manually:
+
+```bash
 $ make
 $ cp kubectl-dev_tool ${HOME}/bin/
 ```
