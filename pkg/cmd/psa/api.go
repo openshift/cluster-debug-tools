@@ -10,17 +10,13 @@ type PodSecurityViolation struct {
 	Namespace string `json:"namespace"`
 	// Level is the pod security level that was violated.
 	Level string `json:"level"`
-	// PodViolations lists the pods that violate the PodSecurity level.
-	PodViolations []*PodViolation `json:"podViolations"`
-}
-
-type PodViolation struct {
-	// PodName is the name of the pod that violates the PodSecurity level.
+	// PodName is the name of the pod with the shortest name that violates the
+	// PodSecurity level.
 	PodName string `json:"podName"`
-	// Violations lists the violations that the pod has.
+	// Violations lists the violations that all the pods in the namespace made.
 	Violations []string `json:"violations"`
-	// Pod is the pod that violates the PodSecurity level.
+	// Pod is the pod with the shortest name that violates the PodSecurity level.
 	Pod *corev1.Pod `json:"pod,omitempty"`
-	// PodController is the controller that manages the pod.
-	PodController any `json:"deployment,omitempty"`
+	// PodController is the controller that manages the pod referenced.
+	PodController any `json:"podcontroller,omitempty"`
 }
