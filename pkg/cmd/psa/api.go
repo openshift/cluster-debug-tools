@@ -1,7 +1,6 @@
 package psa
 
 import (
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 )
 
@@ -20,8 +19,8 @@ type PodViolation struct {
 	PodName string `json:"podName"`
 	// Violations lists the violations that the pod has.
 	Violations []string `json:"violations"`
-	// Deployment is the deployment that the pod belongs to.
-	Deployment *appsv1.Deployment `json:"deployment,omitempty"`
 	// Pod is the pod that violates the PodSecurity level.
 	Pod *corev1.Pod `json:"pod,omitempty"`
+	// PodController is the controller that manages the pod.
+	PodController any `json:"deployment,omitempty"`
 }
