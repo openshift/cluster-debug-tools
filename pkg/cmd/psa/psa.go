@@ -19,6 +19,7 @@ import (
 
 // PSAOptions contains all the options and configsi for running the PSA command.
 type PSAOptions struct {
+	quite     bool
 	level     string
 	namespace string
 
@@ -47,6 +48,7 @@ var (
 		"Deployment":  empty,
 		"DemonSet":    empty,
 		"StatefulSet": empty,
+		"CronJob":     empty,
 		"Job":         empty,
 	}
 )
@@ -80,17 +82,16 @@ func NewCmdPSA(parentName string, streams genericclioptions.IOStreams) *cobra.Co
 
 	fs := cmd.Flags()
 	o.configFlags.AddFlags(fs)
-	fs.StringVar(&o.level, "level", "", "The PodSecurity level to check against. The default is the audit level.")
+	fs.StringVar(&o.level, "level", "restricted", "The PodSecurity level to check against.")
+	fs.BoolVar(&o.quite, "quite", false, "Do not return non-zero exit code on violations.")
 
 	return &cmd
 }
 
 // Validate ensures that all required arguments and flag values are set properly.
 func (o *PSAOptions) Validate() error {
-	if o.level != "" {
-		if _, ok := validLevels[o.level]; !ok {
-			return fmt.Errorf("invalid level %q", o.level)
-		}
+	if _, ok := validLevels[o.level]; !ok {
+		return fmt.Errorf("invalid level %q", o.level)
 	}
 
 	return nil
@@ -169,8 +170,20 @@ func (o *PSAOptions) Run() error {
 		podSecurityViolations = append(podSecurityViolations, psv)
 	}
 
+	if len(podSecurityViolations) == 0 {
+		return nil
+	}
+
 	// Print the violations.
-	return printViolations(podSecurityViolations)
+	if err := json.NewEncoder(os.Stdout).Encode(podSecurityViolations); err != nil {
+		return err
+	}
+
+	if !o.quite {
+		os.Exit(1)
+	}
+
+	return nil
 }
 
 // checkNamespacePodSecurity collects the pod security violations for a given
@@ -178,21 +191,10 @@ func (o *PSAOptions) Run() error {
 func (o *PSAOptions) checkNamespacePodSecurity(ns *corev1.Namespace) (*PodSecurityViolation, error) {
 	nsCopy := ns.DeepCopy()
 
-	// Get a higher enforcement value.
-	targetValue := ""
-	switch {
-	case o.level != "":
-		targetValue = o.level
-	case nsCopy.Labels[psapi.AuditLevelLabel] != "":
-		targetValue = nsCopy.Labels[psapi.AuditLevelLabel]
-	default:
-		targetValue = string(psapi.LevelRestricted)
-	}
-
 	// Update the pod security enforcement for the dry run.
-	nsCopy.Labels[psapi.EnforceLevelLabel] = targetValue
+	nsCopy.Labels[psapi.EnforceLevelLabel] = o.level
 
-	klog.V(4).Infof("Checking nsCopy %q for violations at level %q", nsCopy.Name, targetValue)
+	klog.V(4).Infof("Checking nsCopy %q for violations at level %q", nsCopy.Name, o.level)
 
 	// Make a server-dry-run update on the nsCopy with the audit-level value.
 	_, err := o.client.CoreV1().
@@ -297,9 +299,4 @@ func (o *PSAOptions) getPodController(pod *corev1.Pod) (any, error) {
 		parent.Kind, pod.Name, pod.OwnerReferences, pod.ObjectMeta.OwnerReferences,
 	)
 	return nil, nil
-}
-
-// printViolations prints the PodSecurityViolations as JSON.
-func printViolations(podSecurityViolations []*PodSecurityViolation) error {
-	return json.NewEncoder(os.Stdout).Encode(podSecurityViolations)
 }
