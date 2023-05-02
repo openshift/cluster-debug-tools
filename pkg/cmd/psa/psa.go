@@ -19,7 +19,7 @@ import (
 
 // PSAOptions contains all the options and configsi for running the PSA command.
 type PSAOptions struct {
-	quite     bool
+	quiet     bool
 	level     string
 	namespace string
 
@@ -30,10 +30,10 @@ type PSAOptions struct {
 
 var (
 	psaExample = `
-	# Check if all of cluster namespaces could be upgraded to the restricted level.
+	# Check if all cluster namespaces can be upgraded to the 'restricted' security level.
 	%[1]s psa-check --level restricted
 
-	# Check if given namespace could be upgraded to the restricted level.
+	# Check if a specific namespace, 'my-namespace', can be upgraded to the 'restricted' security level.
 	%[1]s psa-check --level restricted --namespace my-namespace
 `
 
@@ -46,15 +46,15 @@ var (
 
 	podControllers = map[string]struct{}{
 		"Deployment":  empty,
-		"DemonSet":    empty,
+		"DaemonSet":   empty,
 		"StatefulSet": empty,
 		"CronJob":     empty,
 		"Job":         empty,
 	}
 )
 
-// NewCmdPSA creates a cobra.Command that is capable of checking namespaces for{
-// for their viability for a given PodSecurity level.
+// NewCmdPSA creates a new cobra.Command instance that enables checking
+// namespaces for their compatibility with a specified PodSecurity level.
 func NewCmdPSA(parentName string, streams genericclioptions.IOStreams) *cobra.Command {
 	o := PSAOptions{
 		configFlags: genericclioptions.ConfigFlags{
@@ -83,7 +83,7 @@ func NewCmdPSA(parentName string, streams genericclioptions.IOStreams) *cobra.Co
 	fs := cmd.Flags()
 	o.configFlags.AddFlags(fs)
 	fs.StringVar(&o.level, "level", "restricted", "The PodSecurity level to check against.")
-	fs.BoolVar(&o.quite, "quite", false, "Do not return non-zero exit code on violations.")
+	fs.BoolVar(&o.quiet, "quiet", false, "Do not return non-zero exit code on violations.")
 
 	return &cmd
 }
@@ -179,7 +179,7 @@ func (o *PSAOptions) Run() error {
 		return err
 	}
 
-	if !o.quite {
+	if !o.quiet {
 		os.Exit(1)
 	}
 
