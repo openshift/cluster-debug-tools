@@ -179,11 +179,11 @@ func (o *PSAOptions) Run() error {
 		return err
 	}
 
-	if !o.quiet {
-		os.Exit(1)
+	if o.quiet {
+		return nil
 	}
 
-	return nil
+	return fmt.Errorf("found %d pod security violations", len(podSecurityViolations))
 }
 
 // checkNamespacePodSecurity collects the pod security violations for a given

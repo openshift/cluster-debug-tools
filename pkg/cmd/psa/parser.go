@@ -6,9 +6,6 @@ import (
 )
 
 const (
-	headerString = "existing pods in namespace"
-	// submatch in contrast to the whole match.
-	submatch = 1
 	// firstMatch is the first match.
 	firstMatch = 0
 	// secondMatch is the second match.
@@ -16,9 +13,7 @@ const (
 )
 
 var (
-	// wordsInParenthesis parses words from parenthesis.
-	wordsInParenthesis = regexp.MustCompile(`"([^"]+)"`)
-	violations         = map[string]struct{}{
+	violations = map[string]struct{}{
 		"allowPrivilegeEscalation != false": empty,
 		"forbidden AppArmor profile":        empty,
 		"forbidden AppArmor profiles":       empty,
@@ -74,9 +69,14 @@ func parseWarnings(warnings []string) *PodSecurityViolation {
 		// The text should look like this: {pod name}{(optional) more pods hint}: {policy warning A}, {policy warning B}, ...
 		// Verify that we are handling violations
 		textSplit := strings.Split(warning, ": ")
+		if len(textSplit) != 2 {
+			continue
+		}
+
 		matchingList := strings.Split(textSplit[secondMatch], ", ")
 		matchedCandidates := []string{}
 		for _, candidate := range matchingList {
+			// It could be that there are new violations in the pod-security-admission code.
 			if _, ok := violations[candidate]; ok {
 				matchedCandidates = append(matchedCandidates, candidate)
 				continue
@@ -90,6 +90,11 @@ func parseWarnings(warnings []string) *PodSecurityViolation {
 		// Get rid of the potential " (and x other pods)" hint.
 		psv.PodName = strings.Split(textSplit[firstMatch], " ")[firstMatch]
 		psv.Violations = matchedCandidates
+	}
+
+	// Check if any properties of the psv struct have been set. If not, return nil.
+	if psv.Namespace == "" && psv.Level == "" && psv.PodName == "" && len(psv.Violations) == 0 {
+		return nil
 	}
 
 	return &psv
