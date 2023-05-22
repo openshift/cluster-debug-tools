@@ -4,12 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
+	"k8s.io/cli-runtime/pkg/printers"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2"
 	psapi "k8s.io/pod-security-admission/api"
 	utilpointer "k8s.io/utils/pointer"
@@ -19,11 +23,15 @@ import (
 
 // PSAOptions contains all the options and configsi for running the PSA command.
 type PSAOptions struct {
-	quiet     bool
-	level     string
-	namespace string
+	quiet bool
+	level string
 
-	configFlags genericclioptions.ConfigFlags
+	namespace     string
+	allNamespaces bool
+
+	printObj    printers.ResourcePrinterFunc
+	printFlags  *genericclioptions.PrintFlags
+	configFlags *genericclioptions.ConfigFlags
 	client      *kubernetes.Clientset
 	warnings    *warningsHandler
 }
@@ -57,10 +65,11 @@ var (
 // namespaces for their compatibility with a specified PodSecurity level.
 func NewCmdPSA(parentName string, streams genericclioptions.IOStreams) *cobra.Command {
 	o := PSAOptions{
-		configFlags: genericclioptions.ConfigFlags{
+		configFlags: &genericclioptions.ConfigFlags{
 			Namespace:  utilpointer.StringPtr(""),
 			KubeConfig: utilpointer.StringPtr(""),
 		},
+		printFlags: genericclioptions.NewPrintFlags("psa").WithTypeSetter(scheme.Scheme),
 	}
 
 	cmd := cobra.Command{
@@ -82,8 +91,10 @@ func NewCmdPSA(parentName string, streams genericclioptions.IOStreams) *cobra.Co
 
 	fs := cmd.Flags()
 	o.configFlags.AddFlags(fs)
+	o.printFlags.AddFlags(&cmd)
 	fs.StringVar(&o.level, "level", "restricted", "The PodSecurity level to check against.")
 	fs.BoolVar(&o.quiet, "quiet", false, "Do not return non-zero exit code on violations.")
+	fs.BoolVarP(&o.allNamespaces, "all-namespaces", "A", o.allNamespaces, "If true, check the specified action in all namespaces.")
 
 	return &cmd
 }
@@ -93,7 +104,6 @@ func (o *PSAOptions) Validate() error {
 	if _, ok := validLevels[o.level]; !ok {
 		return fmt.Errorf("invalid level %q", o.level)
 	}
-
 	return nil
 }
 
@@ -105,13 +115,11 @@ func (o *PSAOptions) Complete() error {
 		return fmt.Errorf("failed to create rest config: %w", err)
 	}
 
-	ns, set, err := config.Namespace()
+	namespace, _, err := config.Namespace()
 	if err != nil {
 		return fmt.Errorf("failed to get namespace: %w", err)
 	}
-	if set {
-		o.namespace = ns
-	}
+	o.namespace = namespace
 
 	// Setup a client with a custom WarningHandler that collects the warnings.
 	o.warnings = &warningsHandler{}
@@ -119,6 +127,26 @@ func (o *PSAOptions) Complete() error {
 	o.client, err = kubernetes.NewForConfig(restConfig)
 	if err != nil {
 		return fmt.Errorf("failed to create client: %w", err)
+	}
+
+	if o.printFlags.OutputFormat != nil && len(*o.printFlags.OutputFormat) > 0 {
+		printer, err := o.printFlags.ToPrinter()
+		if err != nil {
+			return err
+		}
+		o.printObj = func(object runtime.Object, writer io.Writer) error {
+			return printer.PrintObj(object, writer)
+		}
+
+		return nil
+	}
+
+	o.printObj = func(object runtime.Object, writer io.Writer) error {
+		if err := json.NewEncoder(writer).Encode(object); err != nil {
+			return err
+		}
+
+		return nil
 	}
 
 	return nil
@@ -162,7 +190,7 @@ func (o *PSAOptions) Run() error {
 			)
 		}
 
-		psv.PodController, err = o.getPodController(psv.Pod)
+		psv.PodControllers, err = o.getPodControllers(psv.Pod)
 		if err != nil {
 			return fmt.Errorf("failed to get pod controller: %w", err)
 		}
@@ -175,8 +203,11 @@ func (o *PSAOptions) Run() error {
 	}
 
 	// Print the violations.
-	if err := json.NewEncoder(os.Stdout).Encode(podSecurityViolations); err != nil {
-		return err
+	w := printers.GetNewTabWriter(os.Stdout)
+	defer w.Flush()
+
+	if err := o.printObj(podSecurityViolations, w); err != nil {
+		return fmt.Errorf("failed to print pod security violations: %w", err)
 	}
 
 	if o.quiet {
@@ -202,7 +233,7 @@ func (o *PSAOptions) checkNamespacePodSecurity(ns *corev1.Namespace) (*PodSecuri
 		Update(
 			context.Background(),
 			nsCopy,
-			metav1.UpdateOptions{DryRun: []string{"All"}},
+			metav1.UpdateOptions{DryRun: []string{metav1.DryRunAll}},
 		)
 	if err != nil {
 		return nil, err
@@ -220,7 +251,7 @@ func (o *PSAOptions) checkNamespacePodSecurity(ns *corev1.Namespace) (*PodSecuri
 // getNamespaces returns the namespace that should be checked for pod security.
 // It could be given by the flag. Defaults to all namespaces.
 func (o *PSAOptions) getNamespaces() (*corev1.NamespaceList, error) {
-	if o.namespace == "" {
+	if o.allNamespaces {
 		namespaceList, err := o.client.CoreV1().
 			Namespaces().
 			List(context.Background(), metav1.ListOptions{})
@@ -245,14 +276,28 @@ func (o *PSAOptions) getNamespaces() (*corev1.NamespaceList, error) {
 	}, nil
 }
 
-// getPodController gets the deployment of a pod.
-func (o *PSAOptions) getPodController(pod *corev1.Pod) (any, error) {
+// getPodControllers gets the deployment of a pod.
+func (o *PSAOptions) getPodControllers(pod *corev1.Pod) ([]any, error) {
 	if len(pod.ObjectMeta.OwnerReferences) == 0 {
 		return nil, nil
 	}
 
-	parent := pod.ObjectMeta.OwnerReferences[0]
+	podControllers := []any{}
+	for _, parent := range pod.ObjectMeta.OwnerReferences {
+		any, err := o.getPodController(pod, parent)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get pod controller: %w", err)
+		}
+		if any != nil {
+			podControllers = append(podControllers, any)
+		}
+	}
 
+	return podControllers, nil
+}
+
+// getPodController gets the deployment of a pod.
+func (o *PSAOptions) getPodController(pod *corev1.Pod, parent metav1.OwnerReference) (any, error) {
 	// If the pod is owned by a ReplicaSet, get the ReplicaSet's owner.
 	if parent.Kind == "ReplicaSet" {
 		replicaSet, err := o.client.AppsV1().
@@ -295,8 +340,9 @@ func (o *PSAOptions) getPodController(pod *corev1.Pod) (any, error) {
 	}
 
 	klog.Warningf(
-		"%s isn't owned by a Deployment: pod.Name=%s, pod.Namespace=%s, pod.OwnerReferences=%v",
+		"%s isn't owned by a known pod controller: pod.Name=%s, pod.Namespace=%s, pod.OwnerReferences=%v",
 		parent.Kind, pod.Name, pod.OwnerReferences, pod.ObjectMeta.OwnerReferences,
 	)
+
 	return nil, nil
 }

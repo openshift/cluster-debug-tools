@@ -18,5 +18,5 @@ type PodSecurityViolation struct {
 	// Pod is the pod with the shortest name that violates the PodSecurity level.
 	Pod *corev1.Pod `json:"pod,omitempty"`
 	// PodController is the controller that manages the pod referenced.
-	PodController any `json:"podcontroller,omitempty"`
+	PodControllers []any `json:"podcontroller,omitempty"`
 }
