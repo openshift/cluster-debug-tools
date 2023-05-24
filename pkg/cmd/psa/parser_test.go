@@ -60,7 +60,7 @@ func TestParseWarnings(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			actual := parseWarnings(tc.warnings)
 			if tc.expected == nil && actual != nil {
-				t.Errorf("expected: %q, actual: %q", tc.expected, actual)
+				t.Errorf("expected: %+v, actual: %+v", tc.expected, actual)
 			}
 
 			if tc.expected != nil && !reflect.DeepEqual(actual, tc.expected) {

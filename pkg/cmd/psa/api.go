@@ -2,10 +2,14 @@ package psa
 
 import (
 	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // PodSecurityViolation is a violation of the PodSecurity level set.
 type PodSecurityViolation struct {
+	metav1.TypeMeta `json:",inline"`
+
 	// Namespace where the violation happened.
 	Namespace string `json:"namespace"`
 	// Level is the pod security level that was violated.
@@ -19,4 +23,69 @@ type PodSecurityViolation struct {
 	Pod *corev1.Pod `json:"pod,omitempty"`
 	// PodController is the controller that manages the pod referenced.
 	PodControllers []any `json:"podcontroller,omitempty"`
+}
+
+// Ensure PodSecurityViolation implements the runtime.Object interface.
+var _ runtime.Object = &PodSecurityViolation{}
+
+// DeepCopyObject complements the runtime.Object interface.
+func (v *PodSecurityViolation) DeepCopyObject() runtime.Object {
+	if v == nil {
+		return nil
+	}
+
+	c := &PodSecurityViolation{}
+
+	c.TypeMeta = v.TypeMeta
+	c.Namespace = v.Namespace
+	c.Level = v.Level
+	c.PodName = v.PodName
+
+	if v.Pod != nil {
+		c.Pod = v.Pod.DeepCopy()
+	}
+
+	c.Violations = make([]string, len(v.Violations))
+	copy(c.Violations, v.Violations)
+	c.PodControllers = make([]any, len(v.PodControllers))
+	copy(c.PodControllers, v.PodControllers)
+
+	return c
+
+}
+
+// PodSecurityViolationList is a list of PodSecurityViolation objects.
+type PodSecurityViolationList struct {
+	metav1.TypeMeta `json:",inline"`
+	// Standard list metadata.
+	metav1.ListMeta `json:"metadata,omitempty"`
+
+	// Items is a list of PodSecurityViolation objects.
+	Items []PodSecurityViolation `json:"items"`
+}
+
+// Ensure PodSecurityViolationList implements the runtime.Object interface.
+var _ runtime.Object = &PodSecurityViolationList{}
+
+// DeepCopyObject complements the runtime.Object interface.
+func (l *PodSecurityViolationList) DeepCopyObject() runtime.Object {
+	if l == nil {
+		return nil
+	}
+
+	out := PodSecurityViolationList{}
+	out.TypeMeta = l.TypeMeta
+	out.ListMeta = *l.ListMeta.DeepCopy()
+
+	if l.Items == nil {
+		return &out
+	}
+
+	out.Items = make([]PodSecurityViolation, len(l.Items))
+	for i := range l.Items {
+		p := l.Items[i].DeepCopyObject().(*PodSecurityViolation)
+		out.Items[i] = *p
+	}
+
+	return &out
 }

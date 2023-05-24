@@ -66,8 +66,8 @@ var (
 func NewCmdPSA(parentName string, streams genericclioptions.IOStreams) *cobra.Command {
 	o := PSAOptions{
 		configFlags: &genericclioptions.ConfigFlags{
-			Namespace:  utilpointer.StringPtr(""),
-			KubeConfig: utilpointer.StringPtr(""),
+			Namespace:  utilpointer.String(""),
+			KubeConfig: utilpointer.String(""),
 		},
 		printFlags: genericclioptions.NewPrintFlags("psa").WithTypeSetter(scheme.Scheme),
 	}
@@ -134,9 +134,7 @@ func (o *PSAOptions) Complete() error {
 		if err != nil {
 			return err
 		}
-		o.printObj = func(object runtime.Object, writer io.Writer) error {
-			return printer.PrintObj(object, writer)
-		}
+		o.printObj = printer.PrintObj
 
 		return nil
 	}
@@ -160,7 +158,7 @@ func (o *PSAOptions) Run() error {
 		return fmt.Errorf("failed to get namespaces: %w", err)
 	}
 
-	podSecurityViolations := []*PodSecurityViolation{}
+	podSecurityViolations := PodSecurityViolationList{}
 	// Gather all the warnings for each namespace, when enforcing audit-level.
 	for _, namespace := range namespaceList.Items {
 		psv, err := o.checkNamespacePodSecurity(&namespace)
@@ -195,10 +193,10 @@ func (o *PSAOptions) Run() error {
 			return fmt.Errorf("failed to get pod controller: %w", err)
 		}
 
-		podSecurityViolations = append(podSecurityViolations, psv)
+		podSecurityViolations.Items = append(podSecurityViolations.Items, *psv)
 	}
 
-	if len(podSecurityViolations) == 0 {
+	if len(podSecurityViolations.Items) == 0 {
 		return nil
 	}
 
@@ -206,7 +204,7 @@ func (o *PSAOptions) Run() error {
 	w := printers.GetNewTabWriter(os.Stdout)
 	defer w.Flush()
 
-	if err := o.printObj(podSecurityViolations, w); err != nil {
+	if err := o.printObj(&podSecurityViolations, w); err != nil {
 		return fmt.Errorf("failed to print pod security violations: %w", err)
 	}
 
@@ -214,7 +212,7 @@ func (o *PSAOptions) Run() error {
 		return nil
 	}
 
-	return fmt.Errorf("found %d pod security violations", len(podSecurityViolations))
+	return fmt.Errorf("found %d pod security violations", len(podSecurityViolations.Items))
 }
 
 // checkNamespacePodSecurity collects the pod security violations for a given
