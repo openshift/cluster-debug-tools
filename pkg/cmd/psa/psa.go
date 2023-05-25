@@ -2,152 +2,20 @@ package psa
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"os"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/cli-runtime/pkg/genericclioptions"
-	"k8s.io/cli-runtime/pkg/printers"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/klog/v2"
 	psapi "k8s.io/pod-security-admission/api"
-	utilpointer "k8s.io/utils/pointer"
-
-	"github.com/spf13/cobra"
 )
 
-// PSAOptions contains all the options and configsi for running the PSA command.
-type PSAOptions struct {
-	quiet bool
-	level string
-
-	namespace     string
-	allNamespaces bool
-
-	printObj    printers.ResourcePrinterFunc
-	printFlags  *genericclioptions.PrintFlags
-	configFlags *genericclioptions.ConfigFlags
-	client      *kubernetes.Clientset
-	warnings    *warningsHandler
-}
-
-var (
-	psaExample = `
-	# Check if all cluster namespaces can be upgraded to the 'restricted' security level.
-	%[1]s psa-check --level restricted
-
-	# Check if a specific namespace, 'my-namespace', can be upgraded to the 'restricted' security level.
-	%[1]s psa-check --level restricted --namespace my-namespace
-`
-
-	empty       = struct{}{}
-	validLevels = map[string]struct{}{
-		string(psapi.LevelPrivileged): empty,
-		string(psapi.LevelBaseline):   empty,
-		string(psapi.LevelRestricted): empty,
-	}
-
-	podControllers = map[string]struct{}{
-		"Deployment":  empty,
-		"DaemonSet":   empty,
-		"StatefulSet": empty,
-		"CronJob":     empty,
-		"Job":         empty,
-	}
-)
-
-// NewCmdPSA creates a new cobra.Command instance that enables checking
-// namespaces for their compatibility with a specified PodSecurity level.
-func NewCmdPSA(parentName string, streams genericclioptions.IOStreams) *cobra.Command {
-	o := PSAOptions{
-		configFlags: &genericclioptions.ConfigFlags{
-			Namespace:  utilpointer.String(""),
-			KubeConfig: utilpointer.String(""),
-		},
-		printFlags: genericclioptions.NewPrintFlags("psa").WithTypeSetter(scheme.Scheme),
-	}
-
-	cmd := cobra.Command{
-		Use:   "psa-check",
-		Short: "Verify namespace workloads match the namespace pod security profile",
-
-		Example: fmt.Sprintf(psaExample, parentName),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := o.Validate(); err != nil {
-				return fmt.Errorf("validation failed: %w", err)
-			}
-			if err := o.Complete(); err != nil {
-				return fmt.Errorf("completion failed: %w", err)
-			}
-
-			return o.Run()
-		},
-	}
-
-	fs := cmd.Flags()
-	o.configFlags.AddFlags(fs)
-	o.printFlags.AddFlags(&cmd)
-	fs.StringVar(&o.level, "level", "restricted", "The PodSecurity level to check against.")
-	fs.BoolVar(&o.quiet, "quiet", false, "Do not return non-zero exit code on violations.")
-	fs.BoolVarP(&o.allNamespaces, "all-namespaces", "A", o.allNamespaces, "If true, check the specified action in all namespaces.")
-
-	return &cmd
-}
-
-// Validate ensures that all required arguments and flag values are set properly.
-func (o *PSAOptions) Validate() error {
-	if _, ok := validLevels[o.level]; !ok {
-		return fmt.Errorf("invalid level %q", o.level)
-	}
-	return nil
-}
-
-// Complete sets all information required for processing the command.
-func (o *PSAOptions) Complete() error {
-	config := o.configFlags.ToRawKubeConfigLoader()
-	restConfig, err := config.ClientConfig()
-	if err != nil {
-		return fmt.Errorf("failed to create rest config: %w", err)
-	}
-
-	namespace, _, err := config.Namespace()
-	if err != nil {
-		return fmt.Errorf("failed to get namespace: %w", err)
-	}
-	o.namespace = namespace
-
-	// Setup a client with a custom WarningHandler that collects the warnings.
-	o.warnings = &warningsHandler{}
-	restConfig.WarningHandler = o.warnings
-	o.client, err = kubernetes.NewForConfig(restConfig)
-	if err != nil {
-		return fmt.Errorf("failed to create client: %w", err)
-	}
-
-	if o.printFlags.OutputFormat != nil && len(*o.printFlags.OutputFormat) > 0 {
-		printer, err := o.printFlags.ToPrinter()
-		if err != nil {
-			return err
-		}
-		o.printObj = printer.PrintObj
-
-		return nil
-	}
-
-	o.printObj = func(object runtime.Object, writer io.Writer) error {
-		if err := json.NewEncoder(writer).Encode(object); err != nil {
-			return err
-		}
-
-		return nil
-	}
-
-	return nil
+var podControllers = map[string]struct{}{
+	"Deployment":  empty,
+	"DaemonSet":   empty,
+	"StatefulSet": empty,
+	"CronJob":     empty,
+	"Job":         empty,
 }
 
 // Run attempts to update the namespace psa enforce label to the psa audit value.
@@ -200,11 +68,7 @@ func (o *PSAOptions) Run() error {
 		return nil
 	}
 
-	// Print the violations.
-	w := printers.GetNewTabWriter(os.Stdout)
-	defer w.Flush()
-
-	if err := o.printObj(&podSecurityViolations, w); err != nil {
+	if err := o.printObj(&podSecurityViolations, o.IOStreams.Out); err != nil {
 		return fmt.Errorf("failed to print pod security violations: %w", err)
 	}
 
