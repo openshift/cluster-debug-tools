@@ -10,6 +10,7 @@ import (
 	analyze_e2e "github.com/openshift/cluster-debug-tools/pkg/cmd/analyze-e2e"
 	"github.com/openshift/cluster-debug-tools/pkg/cmd/audit"
 	"github.com/openshift/cluster-debug-tools/pkg/cmd/events"
+	"github.com/openshift/cluster-debug-tools/pkg/cmd/psa"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
@@ -50,6 +51,7 @@ func NewCmdDevHelpers(streams genericclioptions.IOStreams) *cobra.Command {
 		},
 	}
 
+	cmd.AddCommand(psa.NewCmdPSA("openshift-dev-helpers", streams))
 	cmd.AddCommand(events.NewCmdEvent("openshift-dev-helpers", streams))
 	cmd.AddCommand(audit.NewCmdAudit("openshift-dev-helpers", streams))
 	cmd.AddCommand(mustgather.NewCmdRevisionStatus("openshift-dev-helpers", streams))
