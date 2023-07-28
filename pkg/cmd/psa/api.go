@@ -26,12 +26,12 @@ type PodSecurityViolation struct {
 	// Pod is the pod with the shortest name that violates the PodSecurity level.
 	Pod *corev1.Pod `json:"pod,omitempty"`
 	// PodController is the controller that manages the pod referenced.
-	PodControllers []any `json:"podcontroller,omitempty"`
+	PodControllers []any `json:"podController,omitempty"`
 
 	// Labels contain the labels of interest, present in the namespace.
-	Labels map[string]psapi.Level `json:"pslabels,omitempty"`
-	// IsSyncControlLabel signals that the label syncer is turned on for this namespace.
-	IsSyncControlLabel bool `json:"isSyncControlLabel,omitempty"`
+	Labels map[string]psapi.Level `json:"psLabels,omitempty"`
+	// SyncControlLabel signals that the label syncer is turned on for this namespace.
+	SyncControlLabel string `json:"isSyncControlLabelDisabled,omitempty"`
 }
 
 // Ensure PodSecurityViolation implements the runtime.Object interface.
@@ -49,7 +49,7 @@ func (v *PodSecurityViolation) DeepCopyObject() runtime.Object {
 	c.Namespace = v.Namespace
 	c.Level = v.Level
 	c.PodName = v.PodName
-	c.IsSyncControlLabel = v.IsSyncControlLabel
+	c.SyncControlLabel = v.SyncControlLabel
 
 	if v.Pod != nil {
 		c.Pod = v.Pod.DeepCopy()
