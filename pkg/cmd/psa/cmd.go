@@ -14,6 +14,9 @@ import (
 
 var (
 	psaExample = `
+	# Check all namespaces for pod security violations, dynamically applying enforcing-level based on logging-level for a server-side dry-run.
+	%[1]s psa-check --all-namespaces
+
 	# Check if config's namespace can be upgraded to the 'restricted' security level.
 	%[1]s psa-check --level restricted
 

@@ -25,13 +25,13 @@ type PodSecurityViolation struct {
 	Violations []string `json:"violations"`
 	// Pod is the pod with the shortest name that violates the PodSecurity level.
 	Pod *corev1.Pod `json:"pod,omitempty"`
-	// PodController is the controller that manages the pod referenced.
-	PodControllers []any `json:"podController,omitempty"`
+	// PodControllers is the controller that manages the pod referenced.
+	PodControllers []any `json:"podControllers,omitempty"`
 
 	// Labels contain the labels of interest, present in the namespace.
-	Labels map[string]psapi.Level `json:"psLabels,omitempty"`
+	Labels map[string]psapi.Level `json:"labels,omitempty"`
 	// SyncControlLabel signals that the label syncer is turned on for this namespace.
-	SyncControlLabel string `json:"isSyncControlLabelDisabled,omitempty"`
+	SyncControlLabel string `json:"syncControlLabel,omitempty"`
 }
 
 // Ensure PodSecurityViolation implements the runtime.Object interface.
