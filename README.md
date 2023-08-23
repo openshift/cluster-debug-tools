@@ -7,6 +7,7 @@ cluster-debug-tools
 
 ### Available commands
 
+* `psa-check`       checks for pod security violations in a given namespace.
 * `analyze-e2e`     inspects the artifacts gathered during e2e-aws run and analyze them.
 * `audit`           inspects the audit logs captured during CI test run.
 * `event`           inspects the event logs captured during CI test run.
