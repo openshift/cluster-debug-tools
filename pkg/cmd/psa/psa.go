@@ -89,7 +89,7 @@ func (o *PSAOptions) checkNamespacePodSecurity(ns *corev1.Namespace) (*PodSecuri
 	if targetLevel == "" {
 		strictestLabels := getStrictestLabels(labels)
 		if strictestLabels.Has(psapi.EnforceLevelLabel) {
-			// We don't need to check the namespace if logging levels are
+			// We don't need to check the namespace if audit or warn levels are
 			// already being enforced.
 			return nil, nil
 		}
