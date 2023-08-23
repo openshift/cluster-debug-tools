@@ -14,6 +14,9 @@ import (
 
 var (
 	psaExample = `
+	# Check all namespaces for pod security violations, dynamically applying enforcing-level based on audit- and warn-levels for a server-side dry-run.
+	%[1]s psa-check --all-namespaces
+
 	# Check if config's namespace can be upgraded to the 'restricted' security level.
 	%[1]s psa-check --level restricted
 
@@ -88,7 +91,7 @@ func NewCmdPSA(parentName string, streams genericclioptions.IOStreams) *cobra.Co
 	fs := cmd.Flags()
 	o.configFlags.AddFlags(fs)
 	o.printFlags.AddFlags(&cmd)
-	fs.StringVar(&o.level, "level", "restricted", "The PodSecurity level to check against.")
+	fs.StringVar(&o.level, "level", "", "The PodSecurity level to check against.")
 	fs.BoolVar(&o.quiet, "quiet", false, "Do not return non-zero exit code on violations.")
 	fs.BoolVarP(&o.allNamespaces, "all-namespaces", "A", o.allNamespaces, "If true, check the specified action in all namespaces.")
 
@@ -97,6 +100,10 @@ func NewCmdPSA(parentName string, streams genericclioptions.IOStreams) *cobra.Co
 
 // Validate ensures that all required arguments and flag values are set properly.
 func (o *PSAOptions) Validate() error {
+	if o.level == "" {
+		return nil
+	}
+
 	if _, ok := validLevels[o.level]; !ok {
 		return fmt.Errorf("invalid level %q", o.level)
 	}

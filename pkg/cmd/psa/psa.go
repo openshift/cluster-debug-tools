@@ -6,6 +6,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/klog/v2"
 	psapi "k8s.io/pod-security-admission/api"
 )
@@ -82,10 +83,32 @@ func (o *PSAOptions) Run() error {
 // checkNamespacePodSecurity collects the pod security violations for a given
 // namespace on a stricter pod security enforcement.
 func (o *PSAOptions) checkNamespacePodSecurity(ns *corev1.Namespace) (*PodSecurityViolation, error) {
-	nsCopy := ns.DeepCopy()
+	labels := getLabels(ns)
+	targetLevel := o.level
 
+	if targetLevel == "" {
+		strictestLabels := getStrictestLabels(labels)
+		if strictestLabels.Has(psapi.EnforceLevelLabel) {
+			// We don't need to check the namespace if audit or warn levels are
+			// already being enforced.
+			return nil, nil
+		}
+
+		// If there are no labels, assume "restricted".
+		// This should only happen when the namespace is created
+		// OR it is a runtime zero namespace
+		// OR they are fine with the default, which will be restricted.
+		targetLevel = string(psapi.LevelRestricted)
+
+		strictestLabel, ok := strictestLabels.PopAny()
+		if ok {
+			targetLevel = string(labels[strictestLabel])
+		}
+	}
+
+	nsCopy := ns.DeepCopy()
 	// Update the pod security enforcement for the dry run.
-	nsCopy.Labels[psapi.EnforceLevelLabel] = o.level
+	nsCopy.Labels[psapi.EnforceLevelLabel] = targetLevel
 
 	klog.V(4).Infof("Checking nsCopy %q for violations at level %q", nsCopy.Name, o.level)
 
@@ -107,7 +130,16 @@ func (o *PSAOptions) checkNamespacePodSecurity(ns *corev1.Namespace) (*PodSecuri
 		return nil, nil
 	}
 
-	return parseWarnings(warnings), nil
+	psv := parseWarnings(warnings)
+
+	// Take notes of pod security related labels.
+	syncStr, ok := ns.Labels[labelSyncControlLabel]
+	if ok {
+		psv.SyncControlLabel = syncStr
+	}
+	psv.Labels = labels
+
+	return psv, nil
 }
 
 // getNamespaces returns the namespace that should be checked for pod security.
@@ -207,4 +239,61 @@ func (o *PSAOptions) getPodController(pod *corev1.Pod, parent metav1.OwnerRefere
 	)
 
 	return nil, nil
+}
+
+func getLabels(ns *corev1.Namespace) map[string]psapi.Level {
+	podSecurityLevels := []string{
+		psapi.EnforceLevelLabel,
+		psapi.AuditLevelLabel,
+		psapi.WarnLevelLabel,
+	}
+	podSecurityLabels := make(map[string]psapi.Level)
+
+	for _, label := range podSecurityLevels {
+		level, err := getPodSecurityLevel(ns, label)
+		if err != nil {
+			// If the label is not a pod security label, ignore it for calculations.
+			continue
+		}
+
+		podSecurityLabels[label] = level
+	}
+
+	return podSecurityLabels
+}
+
+func getPodSecurityLevel(ns *corev1.Namespace, label string) (psapi.Level, error) {
+	levelStr, ok := ns.Labels[label]
+	if !ok {
+		return "", fmt.Errorf("%s is not set", label)
+	}
+
+	level, err := psapi.ParseLevel(levelStr)
+	if err != nil {
+		return "", fmt.Errorf("%s has an invalid value: %s (%w)", label, level, err)
+	}
+
+	return level, nil
+}
+
+// getStrictestLabels returns the labels that have the strictest level.
+// If there are no labels, it returns an empty set.
+func getStrictestLabels(labels map[string]psapi.Level) sets.Set[string] {
+	strictestLabels := sets.New[string]()
+	strictestLevel := psapi.LevelPrivileged
+
+	for _, level := range labels {
+		if psapi.CompareLevels(strictestLevel, level) < 0 {
+			strictestLevel = level
+		}
+	}
+
+	// get all labels that match that level.
+	for label, level := range labels {
+		if level == strictestLevel {
+			strictestLabels.Insert(label)
+		}
+	}
+
+	return strictestLabels
 }

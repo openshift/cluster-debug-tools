@@ -4,7 +4,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	psapi "k8s.io/pod-security-admission/api"
 )
+
+const labelSyncControlLabel = "security.openshift.io/scc.podSecurityLabelSync"
 
 // PodSecurityViolation is a violation of the PodSecurity level set.
 type PodSecurityViolation struct {
@@ -17,12 +20,18 @@ type PodSecurityViolation struct {
 	// PodName is the name of the pod with the shortest name that violates the
 	// PodSecurity level.
 	PodName string `json:"podName"`
+
 	// Violations lists the violations that all the pods in the namespace made.
 	Violations []string `json:"violations"`
 	// Pod is the pod with the shortest name that violates the PodSecurity level.
 	Pod *corev1.Pod `json:"pod,omitempty"`
-	// PodController is the controller that manages the pod referenced.
-	PodControllers []any `json:"podcontroller,omitempty"`
+	// PodControllers are the controllers that manage the referenced pod.
+	PodControllers []any `json:"podControllers,omitempty"`
+
+	// Labels contain the pod security labels, present in the namespace.
+	Labels map[string]psapi.Level `json:"labels,omitempty"`
+	// SyncControlLabel signals that the label syncer is turned on for this namespace.
+	SyncControlLabel string `json:"syncControlLabel,omitempty"`
 }
 
 // Ensure PodSecurityViolation implements the runtime.Object interface.
@@ -40,9 +49,17 @@ func (v *PodSecurityViolation) DeepCopyObject() runtime.Object {
 	c.Namespace = v.Namespace
 	c.Level = v.Level
 	c.PodName = v.PodName
+	c.SyncControlLabel = v.SyncControlLabel
 
 	if v.Pod != nil {
 		c.Pod = v.Pod.DeepCopy()
+	}
+
+	if v.Labels != nil {
+		c.Labels = make(map[string]psapi.Level, len(v.Labels))
+		for k, v := range v.Labels {
+			c.Labels[k] = v
+		}
 	}
 
 	c.Violations = make([]string, len(v.Violations))
