@@ -3,7 +3,7 @@ package certgraph
 import (
 	"fmt"
 
-	"github.com/openshift/cluster-debug-tools/pkg/cmd/locateinclustercerts/certgraphapi"
+	"github.com/openshift/library-go/pkg/certs/cert-inspection/certgraphapi"
 )
 
 // a virtualCertSource is a cert that we know exists, but we do not know where it's cert/key pair is from.  We may not

@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/openshift/cluster-debug-tools/pkg/cmd/locateinclustercerts/certgraphapi"
+	"github.com/openshift/library-go/pkg/certs/cert-inspection/certgraphapi"
 )
 
 func toCABundle(certificates []*x509.Certificate) (*certgraphapi.CertificateAuthorityBundle, error) {

@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/openshift/cluster-debug-tools/pkg/cmd/locateinclustercerts/certgraphapi"
+	"github.com/openshift/library-go/pkg/certs/cert-inspection/certgraphapi"
 	"k8s.io/apimachinery/pkg/util/sets"
 )
 

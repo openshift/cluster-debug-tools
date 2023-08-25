@@ -5,14 +5,11 @@ import (
 	"sort"
 	"strings"
 
-	"k8s.io/apimachinery/pkg/util/errors"
-
-	"github.com/openshift/cluster-debug-tools/pkg/cmd/locateinclustercerts/certgraph"
-
 	"github.com/gonum/graph"
 	"github.com/gonum/graph/topo"
-
-	"github.com/openshift/cluster-debug-tools/pkg/cmd/locateinclustercerts/certgraphapi"
+	"github.com/openshift/cluster-debug-tools/pkg/cmd/locateinclustercerts/certgraph"
+	"github.com/openshift/library-go/pkg/certs/cert-inspection/certgraphapi"
+	"k8s.io/apimachinery/pkg/util/errors"
 )
 
 func GetMarkdownForPKILIst(title, description, outputDir string, pkiGraph graph.Directed) (string, error) {

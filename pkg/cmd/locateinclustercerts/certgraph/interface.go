@@ -3,10 +3,9 @@ package certgraph
 import (
 	"fmt"
 
-	"github.com/openshift/cluster-debug-tools/pkg/cmd/locateinclustercerts/certgraphapi"
-
 	"github.com/gonum/graph"
 	"github.com/gonum/graph/encoding/dot"
+	"github.com/openshift/library-go/pkg/certs/cert-inspection/certgraphapi"
 )
 
 func NewResources() Resources {

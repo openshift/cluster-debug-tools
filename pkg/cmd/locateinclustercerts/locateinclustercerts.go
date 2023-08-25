@@ -8,20 +8,19 @@ import (
 	"strings"
 
 	"github.com/openshift/cluster-debug-tools/pkg/cmd/locateinclustercerts/certdocs"
-
 	"github.com/openshift/cluster-debug-tools/pkg/cmd/locateinclustercerts/certgraph"
-	"github.com/openshift/cluster-debug-tools/pkg/cmd/locateinclustercerts/certgraphapi"
+	"github.com/openshift/library-go/pkg/certs/cert-inspection/certgraphanalysis"
+	"github.com/openshift/library-go/pkg/certs/cert-inspection/certgraphapi"
+	"github.com/spf13/cobra"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/errors"
-	"k8s.io/klog"
-
-	"github.com/spf13/cobra"
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/cli-runtime/pkg/genericclioptions"
 	"k8s.io/cli-runtime/pkg/resource"
 	"k8s.io/client-go/util/cert"
+	"k8s.io/klog"
 )
 
 var (
@@ -217,7 +216,7 @@ func (o *LocateInClusterCertsOptions) GatherCerts() (*certgraphapi.PKIList, erro
 				errs = append(errs, err)
 			}
 		case *corev1.Secret:
-			details, err := inspectSecret(castObj)
+			details, err := certgraphanalysis.InspectSecret(castObj)
 			if details != nil {
 				certs = append(certs, details)
 			}
@@ -287,30 +286,4 @@ func inspectConfigMap(obj *corev1.ConfigMap) (*certgraphapi.CertificateAuthority
 	caBundleDetail = addConfigMapLocation(caBundleDetail, obj.Namespace, obj.Name)
 
 	return caBundleDetail, nil
-}
-
-func inspectSecret(obj *corev1.Secret) (*certgraphapi.CertKeyPair, error) {
-	resourceString := fmt.Sprintf("secrets/%s[%s]", obj.Name, obj.Namespace)
-	tlsCrt, isTLS := obj.Data["tls.crt"]
-	if !isTLS {
-		return nil, nil
-	}
-	//fmt.Printf("%s - tls (%v)\n", resourceString, obj.CreationTimestamp.UTC())
-	if len(tlsCrt) == 0 {
-		return nil, fmt.Errorf("%s MISSING tls.crt content\n", resourceString)
-	}
-
-	certificates, err := cert.ParseCertsPEM([]byte(tlsCrt))
-	if err != nil {
-		return nil, err
-	}
-	for _, certificate := range certificates {
-		detail, err := toCertKeyPair(certificate)
-		if err != nil {
-			return nil, err
-		}
-		detail = addSecretLocation(detail, obj.Namespace, obj.Name)
-		return detail, nil
-	}
-	return nil, fmt.Errorf("didn't see that coming")
 }

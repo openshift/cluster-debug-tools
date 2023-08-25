@@ -17,7 +17,7 @@ import (
 
 	"github.com/gonum/graph/topo"
 	"github.com/openshift/cluster-debug-tools/pkg/cmd/locateinclustercerts/certgraph"
-	"github.com/openshift/cluster-debug-tools/pkg/cmd/locateinclustercerts/certgraphapi"
+	"github.com/openshift/library-go/pkg/certs/cert-inspection/certgraphapi"
 )
 
 type ClusterCerts struct {
