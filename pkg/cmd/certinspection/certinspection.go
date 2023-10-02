@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/openshift/library-go/pkg/certs/cert-inspection/certgraphanalysis"
+	"github.com/openshift/library-go/pkg/certs/cert-inspection/certgraphapi"
 	certificatesv1beta1 "k8s.io/api/certificates/v1beta1"
 
 	"github.com/spf13/cobra"
@@ -106,8 +108,8 @@ func (o *CertInspectionOptions) Run() error {
 			inspectConfigMap(castObj)
 		case *corev1.Secret:
 			inspectSecret(castObj)
-		case *certificatesv1beta1.CertificateSigningRequest:
-			inspectCSR(castObj)
+		// case *certificatesv1beta1.CertificateSigningRequest:
+		// 	inspectCSR(castObj)
 		default:
 			return fmt.Errorf("unhandled resource: %T", castObj)
 		}
@@ -124,69 +126,34 @@ func (o *CertInspectionOptions) Run() error {
 
 func inspectConfigMap(obj *corev1.ConfigMap) {
 	resourceString := fmt.Sprintf("configmaps/%s[%s]", obj.Name, obj.Namespace)
-	caBundle, ok := obj.Data["ca-bundle.crt"]
-	if !ok {
-		fmt.Printf("%s NOT a ca-bundle\n", resourceString)
-		return
-	}
-	if len(caBundle) == 0 {
-		fmt.Printf("%s MISSING ca-bundle content\n", resourceString)
-		return
-	}
-
-	fmt.Printf("%s - ca-bundle (%v)\n", resourceString, obj.CreationTimestamp.UTC())
-	certificates, err := cert.ParseCertsPEM([]byte(caBundle))
+	caBundle, err := certgraphanalysis.InspectConfigMap(obj)
 	if err != nil {
-		fmt.Printf("    ERROR - %v\n", err)
+		fmt.Printf("%s ERROR - %v\n", resourceString, err)
 		return
 	}
-	for _, curr := range certificates {
-		fmt.Printf("    %s\n", certDetail(curr))
+	if caBundle == nil {
+		fmt.Printf("%s - not a caBundle\n", resourceString)
+		return
+	}
+	fmt.Printf("%s - ca bundle (%v)\n", resourceString, obj.CreationTimestamp.UTC())
+	for _, curr := range caBundle.Spec.CertificateMetadata {
+		fmt.Printf("    %s\n", certMetadataDetail(curr))
 	}
 }
 
 func inspectSecret(obj *corev1.Secret) {
 	resourceString := fmt.Sprintf("secrets/%s[%s]", obj.Name, obj.Namespace)
-	tlsCrt, isTLS := obj.Data["tls.crt"]
-	if isTLS {
-		fmt.Printf("%s - tls (%v)\n", resourceString, obj.CreationTimestamp.UTC())
-		if len(tlsCrt) == 0 {
-			fmt.Printf("%s MISSING tls.crt content\n", resourceString)
-			return
-		}
-
-		certificates, err := cert.ParseCertsPEM([]byte(tlsCrt))
-		if err != nil {
-			fmt.Printf("    ERROR - %v\n", err)
-			return
-		}
-		for _, curr := range certificates {
-			fmt.Printf("    %s\n", certDetail(curr))
-		}
-	}
-
-	caBundle, isCA := obj.Data["ca.crt"]
-	if isCA {
-		fmt.Printf("%s - token secret (%v)\n", resourceString, obj.CreationTimestamp.UTC())
-		if len(caBundle) == 0 {
-			fmt.Printf("%s MISSING ca.crt content\n", resourceString)
-			return
-		}
-
-		certificates, err := cert.ParseCertsPEM([]byte(caBundle))
-		if err != nil {
-			fmt.Printf("    ERROR - %v\n", err)
-			return
-		}
-		for _, curr := range certificates {
-			fmt.Printf("    %s\n", certDetail(curr))
-		}
-	}
-
-	if !isTLS && !isCA {
-		fmt.Printf("%s NOT a tls secret or token secret\n", resourceString)
+	secret, err := certgraphanalysis.InspectSecret(obj)
+	if err != nil {
+		fmt.Printf("%s ERROR - %v\n", resourceString, err)
 		return
 	}
+	if secret == nil {
+		fmt.Printf("%s - not a secret\n", resourceString)
+		return
+	}
+	fmt.Printf("%s - tls (%v)\n", resourceString, obj.CreationTimestamp.UTC())
+	fmt.Printf("    %s\n", certMetadataDetail(secret.Spec.CertMetadata))
 }
 
 func inspectCSR(obj *certificatesv1beta1.CertificateSigningRequest) {
@@ -246,4 +213,21 @@ func certDetail(certificate *x509.Certificate) string {
 	}
 
 	return fmt.Sprintf("%q [%s]%s%s issuer=%q (%v to %v)", humanName, strings.Join(usages, ","), groupString, servingString, signerHumanName, certificate.NotBefore.UTC(), certificate.NotAfter.UTC())
+}
+
+func certMetadataDetail(certKeyMetadata certgraphapi.CertKeyMetadata) string {
+	issuer := ""
+	if certKeyMetadata.CertIdentifier.Issuer != nil {
+		issuer = certKeyMetadata.CertIdentifier.Issuer.CommonName
+	}
+	if issuer == certKeyMetadata.CertIdentifier.CommonName {
+		issuer = "<self>"
+	}
+	return fmt.Sprintf(
+		"%q [%s] issuer=%q (%v)",
+		certKeyMetadata.CertIdentifier.CommonName,
+		strings.Join(certKeyMetadata.Usages, ","),
+		issuer,
+		certKeyMetadata.ValidityDuration,
+	)
 }
