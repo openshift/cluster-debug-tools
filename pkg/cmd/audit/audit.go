@@ -105,7 +105,7 @@ func NewCmdAudit(parentName string, streams genericclioptions.IOStreams) *cobra.
 	cmd.Flags().StringSliceVarP(&o.namespaces, "namespace", "n", o.namespaces, "Filter result of search to only contain the specified namespace.")
 	cmd.Flags().StringSliceVar(&o.names, "name", o.names, "Filter result of search to only contain the specified name.)")
 	cmd.Flags().StringSliceVar(&o.users, "user", o.users, "Filter result of search to only contain the specified user.)")
-	cmd.Flags().StringVar(&o.topBy, "by", o.topBy, "Switch the top output format (eg. -o top -by [verb,user,resource,httpstatus,namespace]).")
+	cmd.Flags().StringVar(&o.topBy, "by", o.topBy, "Switch the top output format (eg. -o top -by [verb,user,resource,httpstatus,namespace,etcdlatency]).")
 	cmd.Flags().BoolVar(&o.failedOnly, "failed-only", false, "Filter result of search to only contain http failures.)")
 	cmd.Flags().Int32SliceVar(&o.httpStatusCodes, "http-status-code", o.httpStatusCodes, "Filter result of search to only certain http status codes (200,429).")
 	cmd.Flags().StringVar(&o.beforeString, "before", o.beforeString, "Filter result of search to only before a timestamp.)")
@@ -157,6 +157,7 @@ func validateTopBy(topBy string) error {
 	case "resource":
 	case "httpstatus":
 	case "namespace":
+	case "etcdlatency":
 	default:
 		return fmt.Errorf("unsupported -by value: [verb,user,resource,httpstatus,namespace]")
 	}
@@ -284,6 +285,8 @@ func (o *AuditOptions) Run() error {
 			PrintTopByHTTPStatusCodeAuditEvents(o.Out, numToDisplay, events)
 		case "namespace":
 			PrintTopByNamespace(o.Out, numToDisplay, events)
+		case "etcdlatency":
+			PrintTopByEtcdLatency(o.Out, numToDisplay, events)
 		default:
 			return fmt.Errorf("unsupported -by value")
 		}

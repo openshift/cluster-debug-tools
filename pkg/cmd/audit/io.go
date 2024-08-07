@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -532,6 +533,57 @@ func PrintTopByNamespace(writer io.Writer, numToDisplay int, events []*auditv1.E
 
 	for _, r := range result {
 		fmt.Fprintf(w, "%dx\t %s\n", r.count, r.name)
+	}
+}
+
+func PrintTopByEtcdLatency(writer io.Writer, numToDisplay int, events []*auditv1.Event) {
+	countEtcdLatency := map[time.Duration][]*auditv1.Event{}
+
+	for _, event := range events {
+		etcdLatencyValueFromAnnotation := event.Annotations["apiserver.latency.k8s.io/etcd"]
+		if len(etcdLatencyValueFromAnnotation) == 0 {
+			continue
+		}
+		etcdLatencyDuration, err := time.ParseDuration(etcdLatencyValueFromAnnotation)
+		if err != nil {
+			fmt.Println(fmt.Sprintf("Error parsing %q=%v duration, err=%v", "apiserver.latency.k8s.io/etcd", etcdLatencyDuration, err))
+			continue
+		}
+
+		if etcdLatencyDuration >= time.Second {
+			etcdLatencyDuration = time.Duration(math.Ceil(etcdLatencyDuration.Seconds())) * time.Second
+		} else if etcdLatencyDuration >= time.Millisecond {
+			etcdLatencyDurationMs := float64(etcdLatencyDuration.Nanoseconds()) / 1e6
+			etcdLatencyDuration = time.Duration(math.Ceil(etcdLatencyDurationMs)) * time.Millisecond
+		} else {
+			continue
+		}
+
+		countEtcdLatency[etcdLatencyDuration] = append(countEtcdLatency[etcdLatencyDuration], event)
+	}
+
+	type etcdLatencyWithCount struct {
+		latency string
+		count   int
+	}
+	result := []etcdLatencyWithCount{}
+
+	for etcdLatencyDuration, etcdLatencyEvents := range countEtcdLatency {
+		result = append(result, etcdLatencyWithCount{latency: fmt.Sprintf("%q=%s", "apiserver.latency.k8s.io/etcd", etcdLatencyDuration), count: len(etcdLatencyEvents)})
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].count >= result[j].count
+	})
+
+	w := tabwriter.NewWriter(writer, 20, 0, 0, ' ', tabwriter.DiscardEmptyColumns)
+	defer w.Flush()
+
+	if len(result) > numToDisplay {
+		result = result[0:numToDisplay]
+	}
+
+	for _, r := range result {
+		fmt.Fprintf(w, "%dx\t %s\n", r.count, r.latency)
 	}
 }
 
