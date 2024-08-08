@@ -265,6 +265,78 @@ func PrintTopByVerbAuditEvents(writer io.Writer, numToDisplay int, events []*aud
 	}
 }
 
+func PrintLatencyTrackersStatsAuditEvents(writer io.Writer, events []*auditv1.Event) {
+	PrintSummary(writer, events)
+
+	latencyTrackers := map[string][]time.Duration{}
+	for _, event := range events {
+		for latencyTracker, latencyValue := range event.Annotations {
+			if !strings.HasPrefix(latencyTracker, "apiserver.latency.k8s.io/") {
+				continue
+			}
+
+			latencyDuration, err := time.ParseDuration(latencyValue)
+			if err != nil {
+				fmt.Println(fmt.Sprintf("Error parsing %q=%v duration, err=%v", latencyTracker, latencyValue, err))
+				continue
+			}
+			latencyTrackers[latencyTracker] = append(latencyTrackers[latencyTracker], latencyDuration)
+		}
+	}
+
+	for _, latencies := range latencyTrackers {
+		sort.Slice(latencies, func(i, j int) bool {
+			return latencies[i] < latencies[j]
+		})
+	}
+
+	type latencySummary struct {
+		min, max, median, percentile90 time.Duration
+	}
+	latencySummaries := map[string]latencySummary{}
+	for latencyTracker, latencies := range latencyTrackers {
+		min, max, median := statsForLatencyTrackers(latencies)
+		latencySummaries[latencyTracker] = latencySummary{
+			min: min, max: max, median: median,
+		}
+	}
+
+	//TODO: sort trackers
+
+	w := tabwriter.NewWriter(writer, 0, 0, 2, ' ', tabwriter.AlignRight)
+	fmt.Fprintln(w, "======================================================================")
+	for latencyTracker, latencySummary := range latencySummaries {
+		fmt.Fprintf(w, "%-50s: max=%v min=%v median=%v 90th=%v\n", latencyTracker, latencySummary.max, latencySummary.min, latencySummary.median, latencySummary.percentile90)
+	}
+	w.Flush()
+}
+
+// TODO: calc 90th
+func statsForLatencyTrackers(latencies []time.Duration) (time.Duration, time.Duration, time.Duration) {
+	if len(latencies) <= 1 {
+		return time.Duration(0), time.Duration(0), time.Duration(0)
+	}
+
+	mean := func(latency1, latency2 time.Duration) time.Duration {
+		latency1Ns := latency1.Nanoseconds()
+		latency2Ns := latency2.Nanoseconds()
+		meanLatencyNs := (latency1Ns + latency2Ns) / 2
+		return time.Duration(meanLatencyNs)
+	}
+	median := func(latencies []time.Duration) time.Duration {
+		var median time.Duration
+		if len(latencies)%2 == 0 {
+			latencies = latencies[len(latencies)/2-1 : len(latencies)/2+1]
+			median = mean(latencies[0], latencies[1])
+		} else {
+			median = latencies[len(latencies)/2]
+		}
+		return median
+	}
+
+	return latencies[0], latencies[len(latencies)-1], median(latencies)
+}
+
 func GetEvents(auditFilenames ...string) ([]*auditv1.Event, error) {
 	ret, readFailures, err := getEventFromManyFiles(auditFilenames...)
 	if readFailures > 0 {
