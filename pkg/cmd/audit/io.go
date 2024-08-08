@@ -300,12 +300,17 @@ func PrintLatencyTrackersStatsAuditEvents(writer io.Writer, events []*auditv1.Ev
 		}
 	}
 
-	//TODO: sort trackers
+	sortedLatencyTrackers := []string{}
+	for latencyTracker, _ := range latencyTrackers {
+		sortedLatencyTrackers = append(sortedLatencyTrackers, latencyTracker)
+	}
+	sort.Strings(sortedLatencyTrackers)
 
 	w := tabwriter.NewWriter(writer, 0, 0, 2, ' ', tabwriter.AlignRight)
 	fmt.Fprintln(w, fmt.Sprintf("Summary of the requests latencies (analysed requests: %d):", len(events)))
 	fmt.Fprintln(w, "======================================================================")
-	for latencyTracker, latencySummary := range latencySummaries {
+	for _, latencyTracker := range sortedLatencyTrackers {
+		latencySummary := latencySummaries[latencyTracker]
 		fmt.Fprintf(w, "%-50s: max=%v min=%v median=%v 90th=%v\n", latencyTracker, latencySummary.max, latencySummary.min, latencySummary.median, latencySummary.percentile90)
 	}
 	w.Flush()
