@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -290,13 +291,13 @@ func PrintLatencyTrackersStatsAuditEvents(writer io.Writer, events []*auditv1.Ev
 	}
 
 	type latencySummary struct {
-		min, max, median, percentile90 time.Duration
+		min, max, median, p90 time.Duration
 	}
 	latencySummaries := map[string]latencySummary{}
 	for latencyTracker, latencies := range latencyTrackers {
-		min, max, median := statsForLatencyTrackers(latencies)
+		min, max, median, p90 := statsForLatencyTrackers(90, latencies)
 		latencySummaries[latencyTracker] = latencySummary{
-			min: min, max: max, median: median,
+			min: min, max: max, median: median, p90: p90,
 		}
 	}
 
@@ -311,35 +312,47 @@ func PrintLatencyTrackersStatsAuditEvents(writer io.Writer, events []*auditv1.Ev
 	fmt.Fprintln(w, "======================================================================")
 	for _, latencyTracker := range sortedLatencyTrackers {
 		latencySummary := latencySummaries[latencyTracker]
-		fmt.Fprintf(w, "%-50s: max=%v min=%v median=%v 90th=%v\n", latencyTracker, latencySummary.max, latencySummary.min, latencySummary.median, latencySummary.percentile90)
+		fmt.Fprintf(w, "%-50s: max=%v min=%v median=%v 90th=%v\n", latencyTracker, latencySummary.max, latencySummary.min, latencySummary.median, latencySummary.p90)
 	}
 	w.Flush()
 }
 
-// TODO: calc 90th
-func statsForLatencyTrackers(latencies []time.Duration) (time.Duration, time.Duration, time.Duration) {
+func statsForLatencyTrackers(percentile float64, latencies []time.Duration) (time.Duration, time.Duration, time.Duration, time.Duration) {
 	if len(latencies) <= 1 {
-		return time.Duration(0), time.Duration(0), time.Duration(0)
+		return time.Duration(0), time.Duration(0), time.Duration(0), time.Duration(0)
 	}
 
-	mean := func(latency1, latency2 time.Duration) time.Duration {
+	isWholeNumberFn := func(num float64) bool {
+		return num == math.Floor(num)
+	}
+	meanFn := func(latency1, latency2 time.Duration) time.Duration {
 		latency1Ns := latency1.Nanoseconds()
 		latency2Ns := latency2.Nanoseconds()
 		meanLatencyNs := (latency1Ns + latency2Ns) / 2
 		return time.Duration(meanLatencyNs)
 	}
-	median := func(latencies []time.Duration) time.Duration {
+	medianFn := func(latencies []time.Duration) time.Duration {
 		var median time.Duration
 		if len(latencies)%2 == 0 {
 			latencies = latencies[len(latencies)/2-1 : len(latencies)/2+1]
-			median = mean(latencies[0], latencies[1])
+			median = meanFn(latencies[0], latencies[1])
 		} else {
 			median = latencies[len(latencies)/2]
 		}
 		return median
 	}
+	percentileFn := func(percentile float64, latencies []time.Duration) time.Duration {
+		indexForPercentile := (percentile / 100.0) * float64(len(latencies))
+		if isWholeNumberFn(indexForPercentile) {
+			return latencies[int(indexForPercentile)]
+		}
+		if indexForPercentile > 1 {
+			return meanFn(latencies[int(indexForPercentile)-1], latencies[int(indexForPercentile)])
+		}
+		return 0
+	}
 
-	return latencies[0], latencies[len(latencies)-1], median(latencies)
+	return latencies[0], latencies[len(latencies)-1], medianFn(latencies), percentileFn(percentile, latencies)
 }
 
 func GetEvents(auditFilenames ...string) ([]*auditv1.Event, error) {
