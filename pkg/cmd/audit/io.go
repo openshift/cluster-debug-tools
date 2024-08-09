@@ -266,6 +266,38 @@ func PrintTopByVerbAuditEvents(writer io.Writer, numToDisplay int, events []*aud
 	}
 }
 
+func AnalyseLatencyTrackersFromAuditEvents(writer io.Writer, events []*auditv1.Event) {
+	eventsWithLatencyTracker := ToSortedEventWithLatencyTracker(events)
+
+	for latencyTracker, eventsWithLatencies := range eventsWithLatencyTracker {
+
+		if latencyTracker != "apiserver.latency.k8s.io/etcd" {
+			continue
+		}
+
+		//fmt.Println(fmt.Sprintf("tracker: %s, first: %v, last: %v, total: %v\n", latencyTracker, eventsWithLatencies[0].Event.RequestReceivedTimestamp, eventsWithLatencies[len(eventsWithLatencies)-1].Event.RequestReceivedTimestamp, len(eventsWithLatencies)))
+
+		iterator := NewSlidingWindowIteratorForLatencyTracker(eventsWithLatencies, time.Minute, 30*time.Second)
+		analyser := NewLatencyTrackerAnalyser(iterator)
+		analysedEventsWithLatencyTrackerSpans := analyser.RunAnalysis()
+
+		DetectIncreasedLatencyFromAnalysedEventsWithLatencyTrackerSpans(analysedEventsWithLatencyTrackerSpans, latencyTracker)
+
+		/*
+			for _, analysedEventsWithLatencyTrackerSpan := range analysedEventsWithLatencyTrackerSpans {
+				fmt.Println(fmt.Sprintf("%-50s: min=%v max=%v median=%v 90th=%v events=%v [%v - %v]\n",
+					latencyTracker,
+					analysedEventsWithLatencyTrackerSpan.Min,
+					analysedEventsWithLatencyTrackerSpan.Max,
+					analysedEventsWithLatencyTrackerSpan.Median,
+					analysedEventsWithLatencyTrackerSpan.P90,
+					len(analysedEventsWithLatencyTrackerSpan.Events),
+					analysedEventsWithLatencyTrackerSpan.FirstEventTimeStamp,
+					analysedEventsWithLatencyTrackerSpan.LastEventTimeStamp))
+			}*/
+	}
+}
+
 func PrintLatencyTrackersStatsAuditEvents(writer io.Writer, events []*auditv1.Event) {
 	latencyTrackers := map[string][]time.Duration{}
 	for _, event := range events {

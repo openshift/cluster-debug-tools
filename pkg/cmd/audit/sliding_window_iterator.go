@@ -2,18 +2,10 @@ package audit
 
 import (
 	"time"
-
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// TODO: should not be part of this file/pkg
-type latencyTrackerTuple struct {
-	latency   time.Duration
-	timestamp metav1.MicroTime
-}
-
-type slidingWindowIterator struct {
-	data           []latencyTrackerTuple
+type slidingWindowIteratorForLatencyTracker struct {
+	events         []*EventWithLatencyTracker
 	windowDuration time.Duration
 	stepDuration   time.Duration
 	currentIndex   int
@@ -22,39 +14,39 @@ type slidingWindowIterator struct {
 	windowEnd      time.Time
 }
 
-func NewSlidingWindowIterator(data []latencyTrackerTuple, windowDuration, stepDuration time.Duration) *slidingWindowIterator {
-	if len(data) == 0 {
-		return &slidingWindowIterator{}
+func NewSlidingWindowIteratorForLatencyTracker(events []*EventWithLatencyTracker, windowDuration, stepDuration time.Duration) *slidingWindowIteratorForLatencyTracker {
+	if len(events) == 0 {
+		return &slidingWindowIteratorForLatencyTracker{}
 	}
 
-	return &slidingWindowIterator{
-		data:           data,
+	return &slidingWindowIteratorForLatencyTracker{
+		events:         events,
 		windowDuration: windowDuration,
 		stepDuration:   stepDuration,
 		currentIndex:   0,
 		stepIndex:      0,
-		windowStart:    data[0].timestamp.Time,
-		windowEnd:      data[0].timestamp.Time.Add(windowDuration),
+		windowStart:    events[0].Event.RequestReceivedTimestamp.Time,
+		windowEnd:      events[0].Event.RequestReceivedTimestamp.Time.Add(windowDuration),
 	}
 }
 
-func (it *slidingWindowIterator) Next() []latencyTrackerTuple {
-	if it.currentIndex >= len(it.data) {
-		return nil
+func (it *slidingWindowIteratorForLatencyTracker) Next() ([]*EventWithLatencyTracker, bool) {
+	if it.currentIndex >= len(it.events)-1 {
+		return nil, false
 	}
 
-	var windowData []latencyTrackerTuple
-	for i := it.currentIndex; i < len(it.data); i++ {
-		entry := it.data[i]
-		if entry.timestamp.Time.After(it.windowEnd) {
+	var windowData []*EventWithLatencyTracker
+	for i := it.currentIndex; i < len(it.events); i++ {
+		entry := it.events[i]
+		if entry.Event.RequestReceivedTimestamp.Time.After(it.windowEnd) {
 			break
 		}
 
-		if entry.timestamp.Time.After(it.windowStart) || entry.timestamp.Time.Equal(it.windowStart) {
+		if entry.Event.RequestReceivedTimestamp.Time.After(it.windowStart) || entry.Event.RequestReceivedTimestamp.Time.Equal(it.windowStart) {
 			windowData = append(windowData, entry)
 		}
 
-		if !entry.timestamp.Time.After(it.windowStart.Add(it.stepDuration)) {
+		if !entry.Event.RequestReceivedTimestamp.Time.After(it.windowStart.Add(it.stepDuration)) {
 			it.stepIndex = i
 		}
 	}
@@ -63,5 +55,5 @@ func (it *slidingWindowIterator) Next() []latencyTrackerTuple {
 	it.windowEnd = it.windowStart.Add(it.windowDuration)
 	it.currentIndex = it.stepIndex
 
-	return windowData
+	return windowData, true
 }

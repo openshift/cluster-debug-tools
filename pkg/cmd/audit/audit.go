@@ -298,7 +298,7 @@ func (o *AuditOptions) Run() error {
 			}
 		}
 	case o.output == "stats":
-		PrintLatencyTrackersStatsAuditEvents(o.Out, events)
+		AnalyseLatencyTrackersFromAuditEvents(o.Out, events)
 	default:
 		return fmt.Errorf("unsupported output format")
 	}
