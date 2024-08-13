@@ -137,6 +137,7 @@ func (o *AuditOptions) Validate() error {
 		}
 	case o.output == "wide":
 	case o.output == "json":
+	case o.output == "stats":
 	default:
 		return fmt.Errorf("unsupported output format: top=N, wide, json")
 	}
@@ -296,6 +297,8 @@ func (o *AuditOptions) Run() error {
 				return err
 			}
 		}
+	case o.output == "stats":
+		AnalyseLatencyTrackersFromAuditEvents(o.Out, events)
 	default:
 		return fmt.Errorf("unsupported output format")
 	}
