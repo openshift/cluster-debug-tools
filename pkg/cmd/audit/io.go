@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -263,6 +264,95 @@ func PrintTopByVerbAuditEvents(writer io.Writer, numToDisplay int, events []*aud
 		fmt.Fprintf(w, "\nTop %d %q (of %d total hits):\n", numToDisplay, strings.ToUpper(verb), resultCounts[verb])
 		PrintAuditEventsWithCount(writer, eventWithCounter)
 	}
+}
+
+func PrintLatencyTrackersStatsAuditEvents(writer io.Writer, events []*auditv1.Event) {
+	PrintSummary(writer, events)
+
+	latencyTrackers := map[string][]time.Duration{}
+	for _, event := range events {
+		for latencyTracker, latencyValue := range event.Annotations {
+			if !strings.HasPrefix(latencyTracker, "apiserver.latency.k8s.io/") {
+				continue
+			}
+
+			latencyDuration, err := time.ParseDuration(latencyValue)
+			if err != nil {
+				fmt.Println(fmt.Sprintf("Error parsing %q=%v duration, for an event with auditID=%v, err=%v", latencyTracker, latencyValue, event.AuditID, err))
+				continue
+			}
+			latencyTrackers[latencyTracker] = append(latencyTrackers[latencyTracker], latencyDuration)
+		}
+	}
+
+	for _, latencies := range latencyTrackers {
+		sort.Slice(latencies, func(i, j int) bool {
+			return latencies[i] < latencies[j]
+		})
+	}
+
+	type latencySummary struct {
+		min, max, median, p90 time.Duration
+	}
+	latencySummaries := map[string]latencySummary{}
+	for latencyTracker, latencies := range latencyTrackers {
+		min, max, median, p90 := statsForLatencyTrackers(90, latencies)
+		latencySummaries[latencyTracker] = latencySummary{
+			min: min, max: max, median: median, p90: p90,
+		}
+	}
+
+	sortedLatencyTrackers := []string{}
+	for latencyTracker, _ := range latencyTrackers {
+		sortedLatencyTrackers = append(sortedLatencyTrackers, latencyTracker)
+	}
+	sort.Strings(sortedLatencyTrackers)
+
+	w := tabwriter.NewWriter(writer, 0, 0, 2, ' ', tabwriter.AlignRight)
+	fmt.Fprintln(w, "======================================================================")
+	for _, latencyTracker := range sortedLatencyTrackers {
+		latencySummary := latencySummaries[latencyTracker]
+		fmt.Fprintf(w, "%-50s: max=%v min=%v median=%v 90th=%v\n", latencyTracker, latencySummary.max, latencySummary.min, latencySummary.median, latencySummary.p90)
+	}
+	w.Flush()
+}
+
+func statsForLatencyTrackers(percentile float64, latencies []time.Duration) (time.Duration, time.Duration, time.Duration, time.Duration) {
+	if len(latencies) <= 1 {
+		return time.Duration(0), time.Duration(0), time.Duration(0), time.Duration(0)
+	}
+
+	isWholeNumberFn := func(num float64) bool {
+		return num == math.Floor(num)
+	}
+	meanFn := func(latency1, latency2 time.Duration) time.Duration {
+		latency1Ns := latency1.Nanoseconds()
+		latency2Ns := latency2.Nanoseconds()
+		meanLatencyNs := (latency1Ns + latency2Ns) / 2
+		return time.Duration(meanLatencyNs)
+	}
+	medianFn := func(latencies []time.Duration) time.Duration {
+		var median time.Duration
+		if len(latencies)%2 == 0 {
+			latencies = latencies[len(latencies)/2-1 : len(latencies)/2+1]
+			median = meanFn(latencies[0], latencies[1])
+		} else {
+			median = latencies[len(latencies)/2]
+		}
+		return median
+	}
+	percentileFn := func(percentile float64, latencies []time.Duration) time.Duration {
+		indexForPercentile := (percentile / 100.0) * float64(len(latencies))
+		if isWholeNumberFn(indexForPercentile) {
+			return latencies[int(indexForPercentile)]
+		}
+		if indexForPercentile > 1 {
+			return meanFn(latencies[int(indexForPercentile)-1], latencies[int(indexForPercentile)])
+		}
+		return latencies[0]
+	}
+
+	return latencies[0], latencies[len(latencies)-1], medianFn(latencies), percentileFn(percentile, latencies)
 }
 
 func GetEvents(auditFilenames ...string) ([]*auditv1.Event, error) {
