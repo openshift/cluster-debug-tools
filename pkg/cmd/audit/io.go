@@ -27,14 +27,16 @@ import (
 
 type eventWithCounter struct {
 	event             *auditv1.Event
+	username          string
 	count             int64
 	statusCodeToCount map[int32]int64
 	totalDuration     time.Duration
 }
 
-func newEventWithCounter(event *auditv1.Event) *eventWithCounter {
+func newEventWithCounter(event *auditv1.Event, username string) *eventWithCounter {
 	return &eventWithCounter{
 		event:             event,
+		username:          username,
 		count:             1,
 		statusCodeToCount: map[int32]int64{},
 		totalDuration:     event.StageTimestamp.Time.Sub(event.RequestReceivedTimestamp.Time),
@@ -89,7 +91,7 @@ func PrintAuditEventsWithCount(writer io.Writer, events []*eventWithCounter) {
 			averageDuration,
 			strings.Join(codeStrings, ","),
 			event.event.RequestURI,
-			event.event.User.Username); err != nil {
+			event.username); err != nil {
 			panic(err)
 		}
 	}
@@ -122,7 +124,11 @@ func PrintTopByUserAuditEvents(writer io.Writer, numToDisplay int, events []*aud
 	countUsers := map[string][]*auditv1.Event{}
 
 	for _, event := range events {
-		countUsers[event.User.Username] = append(countUsers[event.User.Username], event)
+		username := event.User.Username
+		if fieldManager := QueryParams(event.RequestURI).Get("fieldManager"); len(fieldManager) > 0 {
+			username = fmt.Sprintf("%s[%s]", username, fieldManager)
+		}
+		countUsers[username] = append(countUsers[username], event)
 	}
 
 	type userWithCount struct {
@@ -232,16 +238,17 @@ func PrintTopByVerbAuditEvents(writer io.Writer, numToDisplay int, events []*aud
 		resultCounts[verb] = len(eventList)
 		countedEvents := []*eventWithCounter{}
 		for _, event := range eventList {
+			username := getFieldManagerQualifiedUsername(event)
 			found := false
 			for i, countedEvent := range countedEvents {
-				if IsEquivalentAuditURI(countedEvent.event.RequestURI, event.RequestURI) && countedEvent.event.User.Username == event.User.Username {
+				if IsEquivalentAuditURI(countedEvent.event.RequestURI, event.RequestURI) && countedEvent.username == username {
 					countedEvents[i].addEvent(event)
 					found = true
 					break
 				}
 			}
 			if !found {
-				countedEvents = append(countedEvents, newEventWithCounter(event))
+				countedEvents = append(countedEvents, newEventWithCounter(event, username))
 			}
 		}
 
@@ -468,16 +475,17 @@ func PrintTopByHTTPStatusCodeAuditEvents(writer io.Writer, numToDisplay int, eve
 		resultCounts[httpStatusCode] = len(eventList)
 		countedEvents := []*eventWithCounter{}
 		for _, event := range eventList {
+			username := getFieldManagerQualifiedUsername(event)
 			found := false
 			for i, countedEvent := range countedEvents {
-				if IsEquivalentAuditURI(countedEvent.event.RequestURI, event.RequestURI) && countedEvent.event.User.Username == event.User.Username {
+				if IsEquivalentAuditURI(countedEvent.event.RequestURI, event.RequestURI) && countedEvent.username == username {
 					countedEvents[i].addEvent(event)
 					found = true
 					break
 				}
 			}
 			if !found {
-				countedEvents = append(countedEvents, newEventWithCounter(event))
+				countedEvents = append(countedEvents, newEventWithCounter(event, username))
 			}
 		}
 
