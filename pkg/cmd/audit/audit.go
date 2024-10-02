@@ -47,6 +47,7 @@ type AuditOptions struct {
 	namespaces        []string
 	names             []string
 	users             []string
+	fieldManagers     []string
 	uids              []string
 	filenames         []string
 	failedOnly        bool
@@ -105,6 +106,7 @@ func NewCmdAudit(parentName string, streams genericclioptions.IOStreams) *cobra.
 	cmd.Flags().StringSliceVarP(&o.namespaces, "namespace", "n", o.namespaces, "Filter result of search to only contain the specified namespace.")
 	cmd.Flags().StringSliceVar(&o.names, "name", o.names, "Filter result of search to only contain the specified name.)")
 	cmd.Flags().StringSliceVar(&o.users, "user", o.users, "Filter result of search to only contain the specified user.)")
+	cmd.Flags().StringSliceVar(&o.fieldManagers, "field-manager", o.fieldManagers, "Filter result of search to only contain the specified fieldManager.)")
 	cmd.Flags().StringVar(&o.topBy, "by", o.topBy, "Switch the top output format (eg. -o top -by [verb,user,resource,httpstatus,namespace]).")
 	cmd.Flags().BoolVar(&o.failedOnly, "failed-only", false, "Filter result of search to only contain http failures.)")
 	cmd.Flags().Int32SliceVar(&o.httpStatusCodes, "http-status-code", o.httpStatusCodes, "Filter result of search to only certain http status codes (200,429).")
@@ -238,6 +240,9 @@ func (o *AuditOptions) Run() error {
 	}
 	if len(o.users) > 0 {
 		filters = append(filters, &FilterByUser{Users: sets.NewString(o.users...)})
+	}
+	if len(o.fieldManagers) > 0 {
+		filters = append(filters, &FilterByFieldManager{FieldManagers: sets.NewString(o.fieldManagers...)})
 	}
 	if len(o.verbs) > 0 {
 		filters = append(filters, &FilterByVerbs{Verbs: sets.NewString(o.verbs...)})

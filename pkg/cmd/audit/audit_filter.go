@@ -1,6 +1,8 @@
 package audit
 
 import (
+	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -127,6 +129,15 @@ func (f *FilterByUser) Matches(event *auditv1.Event) bool {
 	return util.AcceptString(f.Users, event.User.Username)
 }
 
+type FilterByFieldManager struct {
+	FieldManagers sets.String
+}
+
+func (f *FilterByFieldManager) Matches(event *auditv1.Event) bool {
+	queryParams := QueryParams(event.RequestURI)
+	return util.AcceptString(f.FieldManagers, queryParams.Get("fieldManager"))
+}
+
 type FilterByVerbs struct {
 	Verbs sets.String
 }
@@ -175,6 +186,29 @@ func (f *FilterByResources) Matches(event *auditv1.Event) bool {
 	}
 
 	return false
+}
+
+func getFieldManagerQualifiedUsername(event *auditv1.Event) string {
+	username := event.User.Username
+	if fieldManager := QueryParams(event.RequestURI).Get("fieldManager"); len(fieldManager) > 0 {
+		username = fmt.Sprintf("%s[%s]", username, fieldManager)
+	}
+	return username
+}
+
+func QueryParams(uri string) url.Values {
+	// some request URL has query parameters like: /apis/image.openshift.io/v1/images?limit=500&resourceVersion=0
+	// we are not interested in the query parameters.
+	parts := strings.Split(uri, "?")
+	if len(parts) < 2 {
+		return nil
+	}
+	queryParams := parts[1]
+	values, err := url.ParseQuery(queryParams)
+	if err != nil {
+		panic(err)
+	}
+	return values
 }
 
 func URIToParts(uri string) (string, schema.GroupVersionResource, string, string) {
