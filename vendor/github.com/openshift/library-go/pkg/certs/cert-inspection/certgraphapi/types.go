@@ -2,6 +2,7 @@ package certgraphapi
 
 import (
 	"encoding/json"
+	"strings"
 )
 
 type PKIList struct {
@@ -11,8 +12,29 @@ type PKIList struct {
 
 	Description string
 
+	InClusterResourceData PerInClusterResourceData
+	OnDiskResourceData    PerOnDiskResourceData
+
 	CertificateAuthorityBundles CertificateAuthorityBundleList
 	CertKeyPairs                CertKeyPairList
+}
+
+// PerInClusterResourceData tracks metadata that corresponds to specific secrets and configmaps.
+// This data should not duplicate the analysis of the certkeypair lists, but is pulled from annotations on the resources.
+// It will be stitched together by a generator after the fact.
+type PerInClusterResourceData struct {
+	// +mapType:=atomic
+	CertificateAuthorityBundles []PKIRegistryInClusterCABundle `json:"certificateAuthorityBundles"`
+	// +mapType:=atomic
+	CertKeyPairs []PKIRegistryInClusterCertKeyPair `json:"certKeyPairs"`
+}
+
+// PerOnDiskResourceData tracks metadata that corresponds to specific files on disk.
+// This data should not duplicate the analysis of the certkeypair lists, but is pulled from files on disk.
+// It will be stitched together by a generator after the fact.
+type PerOnDiskResourceData struct {
+	// +mapType:=atomic
+	TLSArtifact []OnDiskLocationWithMetadata `json:"tlsArtifact"`
 }
 
 type CertificateAuthorityBundleList struct {
@@ -90,7 +112,12 @@ type OnDiskCertKeyPairLocation struct {
 }
 
 type OnDiskLocation struct {
-	Path           string
+	Path string
+}
+
+type OnDiskLocationWithMetadata struct {
+	OnDiskLocation
+
 	User           string
 	Group          string
 	Permissions    string
@@ -118,8 +145,9 @@ type ClientCertDetails struct {
 }
 
 type CertIdentifier struct {
-	CommonName   string
-	SerialNumber string
+	CommonName    string
+	SerialNumber  string
+	PubkeyModulus string
 
 	Issuer *CertIdentifier
 }
@@ -162,4 +190,45 @@ func (t *CertificateAuthorityBundle) DeepCopy() *CertificateAuthorityBundle {
 	}
 
 	return ret
+}
+
+type ConfigMapRefByNamespaceName []InClusterConfigMapLocation
+type SecretRefByNamespaceName []InClusterSecretLocation
+type SecretInfoByNamespaceName map[InClusterSecretLocation]PKIRegistryCertKeyPairInfo
+type ConfigMapInfoByNamespaceName map[InClusterConfigMapLocation]PKIRegistryCertificateAuthorityInfo
+
+func (n SecretRefByNamespaceName) Len() int {
+	return len(n)
+}
+func (n SecretRefByNamespaceName) Swap(i, j int) {
+	n[i], n[j] = n[j], n[i]
+}
+func (n SecretRefByNamespaceName) Less(i, j int) bool {
+	diff := strings.Compare(n[i].Namespace, n[j].Namespace)
+	switch {
+	case diff < 0:
+		return true
+	case diff > 0:
+		return false
+	}
+
+	return strings.Compare(n[i].Name, n[j].Name) < 0
+}
+
+func (n ConfigMapRefByNamespaceName) Len() int {
+	return len(n)
+}
+func (n ConfigMapRefByNamespaceName) Swap(i, j int) {
+	n[i], n[j] = n[j], n[i]
+}
+func (n ConfigMapRefByNamespaceName) Less(i, j int) bool {
+	diff := strings.Compare(n[i].Namespace, n[j].Namespace)
+	switch {
+	case diff < 0:
+		return true
+	case diff > 0:
+		return false
+	}
+
+	return strings.Compare(n[i].Name, n[j].Name) < 0
 }

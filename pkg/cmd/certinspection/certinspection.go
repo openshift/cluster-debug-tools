@@ -143,17 +143,19 @@ func inspectConfigMap(obj *corev1.ConfigMap) {
 
 func inspectSecret(obj *corev1.Secret) {
 	resourceString := fmt.Sprintf("secrets/%s[%s]", obj.Name, obj.Namespace)
-	secret, err := certgraphanalysis.InspectSecret(obj)
+	secrets, err := certgraphanalysis.InspectSecret(obj)
 	if err != nil {
 		fmt.Printf("%s ERROR - %v\n", resourceString, err)
 		return
 	}
-	if secret == nil {
+	if len(secrets) == 0 {
 		fmt.Printf("%s - not a secret\n", resourceString)
 		return
 	}
 	fmt.Printf("%s - tls (%v)\n", resourceString, obj.CreationTimestamp.UTC())
-	fmt.Printf("    %s\n", certMetadataDetail(secret.Spec.CertMetadata))
+	for _, secret := range secrets {
+		fmt.Printf("    %s\n", certMetadataDetail(secret.Spec.CertMetadata))
+	}
 }
 
 func inspectCSR(obj *certificatesv1beta1.CertificateSigningRequest) {
