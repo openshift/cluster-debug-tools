@@ -23,6 +23,7 @@ To make this plugin available in `oc` or `kubectl`, just run: `go get github.com
 Alternatively, you can build and install it manually:
 
 ```go
+$ cd cluster-debug-tools
 $ make
 $ cp kubectl-dev_tool ${HOME}/bin/
 ```
