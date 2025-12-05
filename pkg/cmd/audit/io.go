@@ -367,6 +367,9 @@ func GetEvents(auditFilenames ...string) ([]*auditv1.Event, error) {
 	if readFailures > 0 {
 		fmt.Fprintf(os.Stderr, "had %d line read failures\n", readFailures)
 	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+	}
 
 	// sort events by time
 	sort.Slice(ret, func(i, j int) bool {
@@ -434,8 +437,7 @@ func getEventsFromFile(auditFilename string) ([]*auditv1.Event, int, error) {
 		return nil, 0, err
 	}
 
-	scanner := bufio.NewScanner(file)
-	return getEventsFromScanner(auditFilename, scanner)
+	return getEventsFromReader(auditFilename, file)
 }
 
 func getEventsFromZipFile(auditFilename string) ([]*auditv1.Event, int, error) {
@@ -459,13 +461,18 @@ func getEventsFromZipFile(auditFilename string) ([]*auditv1.Event, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	scanner := bufio.NewScanner(zw)
-	return getEventsFromScanner(auditFilename, scanner)
+	return getEventsFromReader(auditFilename, zw)
 }
 
-func getEventsFromScanner(auditFilename string, scanner *bufio.Scanner) ([]*auditv1.Event, int, error) {
+func getEventsFromReader(auditFilename string, reader io.Reader) ([]*auditv1.Event, int, error) {
 	ret := []*auditv1.Event{}
 	failures := 0
+
+	scanner := bufio.NewScanner(reader)
+	// some audit entry may be really long due to response object being
+	// included, use an initil buffer of 4K and let it grow up to 128K
+	buf := make([]byte, 4*1024)
+	scanner.Buffer(buf, 2*bufio.MaxScanTokenSize)
 
 	// each line in audit file use following format: `hostname {JSON}`, we are not interested in hostname,
 	// so lets parse out the events.
@@ -498,6 +505,13 @@ func getEventsFromScanner(auditFilename string, scanner *bufio.Scanner) ([]*audi
 		// Add to index
 		ret = append(ret, eventObj)
 	}
+	// any error other than io.EOF means that we are dropping unknown
+	// number of events, this should be an error condition
+	if err := scanner.Err(); err != nil {
+		failures++
+		return ret, failures, fmt.Errorf("unexpected error processing file: %q, line number: %d, err: %w", auditFilename, line+1, err)
+	}
+
 	return ret, failures, nil
 }
 func getEventsFromDirectory(auditFilename string) ([]*auditv1.Event, int, error) {

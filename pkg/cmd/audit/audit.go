@@ -53,6 +53,7 @@ type AuditOptions struct {
 	failedOnly        bool
 	httpStatusCodes   []int32
 	output            string
+	to                string
 	topBy             string
 	beforeString      string
 	afterString       string
@@ -99,6 +100,7 @@ func NewCmdAudit(parentName string, streams genericclioptions.IOStreams) *cobra.
 
 	cmd.Flags().StringSliceVarP(&o.filenames, "filename", "f", o.filenames, "Search for audit logs that contains specified URI")
 	cmd.Flags().StringVarP(&o.output, "output", "o", o.output, "Choose your output format")
+	cmd.Flags().StringVar(&o.to, "to", o.to, "Choose the directory where output files will be created, if not provided output files will be written to the tmp folder")
 	cmd.Flags().StringSliceVar(&o.uids, "uid", o.uids, "Only match specific UIDs")
 	cmd.Flags().StringSliceVar(&o.verbs, "verb", o.verbs, "Filter result of search to only contain the specified verb (eg. 'update', 'get', etc..)")
 	cmd.Flags().StringSliceVar(&o.resources, "resource", o.resources, "Filter result of search to only contain the specified resource.)")
@@ -140,6 +142,7 @@ func (o *AuditOptions) Validate() error {
 	case o.output == "wide":
 	case o.output == "json":
 	case o.output == "stats":
+	case o.output == "latency-dist":
 	default:
 		return fmt.Errorf("unsupported output format: top=N, wide, json")
 	}
@@ -222,21 +225,31 @@ func (o *AuditOptions) Run() error {
 		filters = append(filters, &FilterByAfter{After: t})
 	}
 	if len(o.resources) > 0 {
-		resources := map[schema.GroupResource]bool{}
-		for _, resource := range o.resources {
-			parts := strings.Split(resource, ".")
-			gr := schema.GroupResource{}
-			gr.Resource = parts[0]
-			if len(parts) >= 2 {
-				gr.Group = strings.Join(parts[1:], ".")
+		switch {
+		case len(o.resources) == 1 && o.resources[0] == "*":
+			filters = append(filters, FilterByAnyResources{})
+		default:
+			resources := map[schema.GroupResource]bool{}
+			for _, resource := range o.resources {
+				parts := strings.Split(resource, ".")
+				gr := schema.GroupResource{}
+				gr.Resource = parts[0]
+				if len(parts) >= 2 {
+					gr.Group = strings.Join(parts[1:], ".")
+				}
+				resources[gr] = true
 			}
-			resources[gr] = true
-		}
 
-		filters = append(filters, &FilterByResources{Resources: resources})
+			filters = append(filters, &FilterByResources{Resources: resources})
+		}
 	}
 	if len(o.subresources) > 0 {
-		filters = append(filters, &FilterBySubresources{Subresources: sets.NewString(o.subresources...)})
+		switch {
+		case len(o.subresources) == 1 && o.subresources[0] == "-*":
+			filters = append(filters, FilterByNoSubresource{})
+		default:
+			filters = append(filters, &FilterBySubresources{Subresources: sets.NewString(o.subresources...)})
+		}
 	}
 	if len(o.users) > 0 {
 		filters = append(filters, &FilterByUser{Users: sets.NewString(o.users...)})
@@ -304,6 +317,11 @@ func (o *AuditOptions) Run() error {
 		}
 	case o.output == "stats":
 		PrintLatencyTrackersStatsAuditEvents(o.Out, events)
+	case o.output == "latency-dist":
+		writer := plotWriter{o.to}
+		if err := writer.Write(events); err != nil {
+			return err
+		}
 	default:
 		return fmt.Errorf("unsupported output format")
 	}

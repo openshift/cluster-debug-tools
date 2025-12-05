@@ -79,6 +79,15 @@ func (f *FilterByNamespaces) Matches(event *auditv1.Event) bool {
 
 }
 
+type FilterByNoSubresource struct{}
+
+func (f FilterByNoSubresource) Matches(event *auditv1.Event) bool {
+	if event.ObjectRef != nil && len(event.ObjectRef.Subresource) == 0 {
+		return true
+	}
+	return false
+}
+
 type FilterBySubresources struct {
 	Subresources sets.String
 }
@@ -144,6 +153,16 @@ type FilterByVerbs struct {
 
 func (f *FilterByVerbs) Matches(event *auditv1.Event) bool {
 	return util.AcceptString(f.Verbs, event.Verb)
+}
+
+type FilterByAnyResources struct{}
+
+func (f FilterByAnyResources) Matches(event *auditv1.Event) bool {
+	if event.ObjectRef != nil && len(event.ObjectRef.Resource) > 0 {
+		// the request is a resource scoped
+		return true
+	}
+	return false
 }
 
 type FilterByResources struct {
