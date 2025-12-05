@@ -27,6 +27,34 @@ $ make
 $ cp kubectl-dev_tool ${HOME}/bin/
 ```
 
+### Claude Agent Definition
+
+This repository defines a Claude agent that can operate the kubectl-dev_tool CLI.
+You can use natural language to ask the agent to analyze audit logs, inspect certificates, or run any other supported command.
+The agent will translate your request into the correct CLI invocation and execute it.
+
+#### Example Interactions with the Claude Agent
+
+Below is an example demonstrating how Claude uses this agent in practice.
+
+```
+> (Me) Find all failed calls to the kube-system namespace in my audit logs.
+
+⏺ (Claude) Sure — please provide the audit log path.
+
+> (Me) /Users/me/workspace/audit-logs/kube-apiserver
+
+⏺ (Claude) Running analysis...
+Summary:
+  Total failed calls: 281
+  404: 229 events
+  429: 45 events
+  504: 3 events
+  500: 2 events
+  403: 2 events
+```
+
+
 ### License
 
 cluster-debug-tools is licensed under the [Apache License, Version 2.0](http://www.apache.org/licenses/).
