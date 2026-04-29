@@ -1,10 +1,4 @@
 reviewers:
-  - deads2k
-  - soltysh
-  - mfojtik
-  - p0lyn0mial
+  - control-plane-approvers
 approvers:
-  - deads2k
-  - soltysh
-  - mfojtik
-  - p0lyn0mial
+  - control-plane-approvers
